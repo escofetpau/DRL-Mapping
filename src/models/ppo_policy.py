@@ -4,15 +4,16 @@ from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 #from stable_baselines3.common.policies import ActorCriticPolicy
 import numpy as np
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from src.models.feature_extractor import GNNFeatureExtractor
+
 
 class CustomPPOPolicy(MaskableActorCriticPolicy):
-    def __init__(self, observation_space, action_space, lr_schedule, features_extractor_class, net_arch = [64, 64, 64], features_extractor_kwargs={}, **kwargs):
+    def __init__(self, observation_space, action_space, lr_schedule, device, net_arch = [64, 64, 64], features_extractor_kwargs={}, **kwargs):
         
         print(kwargs)
         super().__init__(observation_space, action_space, lr_schedule, 
                          net_arch = net_arch,
-                         features_extractor_class=features_extractor_class, 
+                         features_extractor_class=GNNFeatureExtractor, 
                          features_extractor_kwargs=features_extractor_kwargs)
         '''
         self.actor_net = nn.Sequential(

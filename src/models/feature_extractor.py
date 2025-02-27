@@ -1,30 +1,34 @@
-from pydantic import _getattr_migration
+import numpy as np
 import torch
 import torch.nn as nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from torch_geometric.data import Data, Batch
-from src.models.gatv2 import GATv2Model
 from torch_geometric.nn.models import GCN
-from src.utils.constants import N_CORES, HIDDEN_FEATURES_GAT, NUM_HEADS, HIDDEN_LAYERS_GAT, GAT_DROPOUT, OUT_FEATURES_GAT, ST_OUTPUT_DIM, ST_HIDDEN_DIM
-import numpy as np
+
+from src.models.gnn.gatv2 import GATv2Model
+from src.utils.constants import N_CORES, ST_OUTPUT_DIM, ST_HIDDEN_DIM
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class GATv2FeatureExtractor(BaseFeaturesExtractor):
+class GNNFeatureExtractor(BaseFeaturesExtractor):
     '''
-    El feature extractor s'encarrega de redimensionar les observacions i fer el forward per la GAT.
+    El feature extractor s'encarrega de redimensionar les observacions i fer el forward per la GNN.
     '''
-    def __init__(self, observation_space, in_features=2 * N_CORES + 1, edge_dim=2, 
-                 hidden_features_gat=HIDDEN_FEATURES_GAT, out_features_gat=OUT_FEATURES_GAT,
-                 num_heads=NUM_HEADS, hidden_layers_gat=HIDDEN_LAYERS_GAT, gat_dropout=GAT_DROPOUT):
-        super(GATv2FeatureExtractor, self).__init__(observation_space, 
-                                                   features_dim=out_features_gat * 8 + N_CORES)
-        
+    def __init__(self, observation_space, gnn_name, edge_dim=2,
+                 hidden_features=64, out_features=16,
+                 num_heads=1, hidden_layers=4, dropout=0):
+        assert gnn_name in ['GATv2', 'GCN'], f'Invalid GNN model name: {gnn_name}'
 
-        #self.gat = GATv2Model(in_features, edge_dim, hidden_features_gat, out_features_gat, num_heads, hidden_layers_gat, gat_dropout)
-        self.gat = GCN(in_features, hidden_features_gat, hidden_layers_gat, out_features_gat, gat_dropout)
-        self.gat.to(device)
-    
+        super(GNNFeatureExtractor, self).__init__(observation_space, 
+                                                   features_dim=out_features * 8 + N_CORES)
+        in_features = observation_space['node_features'].shape[1]
+        self.out_features = out_features
+        if gnn_name == 'GATv2':
+            self.gnn = GATv2Model(in_features, edge_dim, hidden_features, out_features, num_heads, hidden_layers, dropout)
+        else:
+            self.gnn = GCN(in_features, hidden_features, hidden_layers, out_features, dropout)
+        self.gnn.to(device)
+
 
     def forward(self, obs):
         #Durant l'exploració és 1, durant l'entrenament es BATCH_SIZE
@@ -43,12 +47,11 @@ class GATv2FeatureExtractor(BaseFeaturesExtractor):
         edge_features = batch.edge_attr.to(device)
         edge_features = edge_features.sum(axis=1) # combine interaction and lookahead for GCN
 
-        node_embeddings = self.gat(x, edge_index, edge_features)
+        node_embeddings = self.gnn(x, edge_index, edge_features)
         #De nou, quan hi hagi diversos nombres de qbits, s'haurà de refer utilitzant el batch.batch, que indica a quina observació
         #Pertany cada node TODO
-        
 
-        node_embeddings = node_embeddings.reshape(batch_size, n_qbits*OUT_FEATURES_GAT) #Batched flatten
+        node_embeddings = node_embeddings.reshape(batch_size, n_qbits*self.out_features) #Batched flatten
         node_embeddings = torch.cat((node_embeddings, obs['core_capacities']), dim = 1)
         return node_embeddings
         '''
@@ -57,7 +60,7 @@ class GATv2FeatureExtractor(BaseFeaturesExtractor):
         node_embeddings = node_embeddings.unsqueeze(0)
 
         #El que abans era un graf tot junt ara es torna a separar per instàncies dins del batch
-        node_embeddings = node_embeddings.view(batch_size, n_qbits, OUT_FEATURES_GAT)
+        node_embeddings = node_embeddings.view(batch_size, n_qbits, self.out_features)
 
         return node_embeddings
 

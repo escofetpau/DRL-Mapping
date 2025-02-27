@@ -1,0 +1,32 @@
+circuit:
+  circuit: null
+  random_circuits: true
+  n_slices: 32
+  n_qubits: 8
+  gates_per_slice: [1]
+
+action_type: S # set to L
+
+weights_reward:
+  nonlocal: 10
+
+ppo:
+  batch_size: 64
+  learning_rate: 0.0005
+  n_steps: 4096
+  gae_lambda: 0.95
+
+
+policy_kwargs:
+  net_arch: [64, 64, 64]
+  features_extractor_kwargs:
+    hidden_features: 64
+    num_heads: 1
+    hidden_layers: 4
+    gat_dropout: 0.3
+    out_features: 16
+
+  gnn_name: 'GATv2' # or 'GCN'
+
+total_timesteps: 3000000
+

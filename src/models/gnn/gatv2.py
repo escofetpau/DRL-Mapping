@@ -20,4 +20,4 @@ class GATv2Model(nn.Module):
         for layer in self.layers:
             x = layer(x, edge_index, edge_attr)
             x = nn.functional.relu(x)
-        return x   
+        return x  
