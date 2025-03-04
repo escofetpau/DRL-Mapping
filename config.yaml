@@ -9,6 +9,8 @@ action_type: S # set to L
 
 weights_reward:
   nonlocal: 10
+  intervention: 20
+  direct_capacity_violation: 30
 
 ppo:
   batch_size: 64
@@ -23,10 +25,9 @@ policy_kwargs:
     hidden_features: 64
     num_heads: 1
     hidden_layers: 4
-    gat_dropout: 0.3
+    dropout: 0.3
     out_features: 16
-
-  gnn_name: 'GATv2' # or 'GCN'
+    gnn_name: 'GATv2' # or 'GCN'
 
 total_timesteps: 3000000
 
