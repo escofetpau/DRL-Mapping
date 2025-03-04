@@ -21,23 +21,58 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
 
         super(GNNFeatureExtractor, self).__init__(observation_space, 
                                                    features_dim=out_features * 8 + N_CORES)
-        in_features = observation_space['node_features'].shape[1]
+
+        in_features = observation_space['new_allocation'].shape[1] # PREGUNTA PER SERGI: n_qbits?? TODO: fix
         self.out_features = out_features
-        if gnn_name == 'GATv2':
+
+        self.gnn_name = gnn_name
+
+        if self.gnn_name == 'GATv2':
             self.gnn = GATv2Model(in_features, edge_dim, hidden_features, out_features, num_heads, hidden_layers, dropout)
         else:
             self.gnn = GCN(in_features, hidden_features, hidden_layers, out_features, dropout)
         self.gnn.to(device)
 
 
+    def _get_node_features(self, obs) -> np.ndarray:
+        '''
+        Returns the node features for the GNN, which are the new and old allocations.
+
+        Arguments:
+            - obs['new_allocation']: (batch_size, n_qbits, n_cores)
+            - obs['old_allocation']: (batch_size, n_qbits, n_cores)
+
+        Returns:
+            - node_features: (batch_size, 2*n_qbits, n_qbits)
+
+        '''
+        n_qbits = int(obs['n_qbits'][0][0])
+        return np.concat([obs['new_allocation'][:, :n_qbits, :n_qbits], obs['old_allocation'][:, :n_qbits, :n_qbits]], axis=1)
+
+
+    def _get_adj_matrix(self, obs) -> np.ndarray:
+        '''
+        Returns the adjacency matrix for the GNN, 
+        
+        Arguments (no pooling): 
+            - obs['interactions']: (batch_size, n_qbits, n_qbits)
+            - obs['lookahead']: (batch_size, n_qbits, n_qbits)
+
+        Returns:
+            - adj_matrix: (batch_size, 2*n_qbits, n_qbits)
+        '''
+        n_qbits = int(obs['n_qbits'][0][0])
+        return np.concat([obs['interactions'][:, :n_qbits, :n_qbits], obs['lookaheads'][:, :n_qbits, :n_qbits]], axis=1)
+
+
     def forward(self, obs):
         #Durant l'exploració és 1, durant l'entrenament es BATCH_SIZE
-        batch_size = obs['node_features'].shape[0]
+        batch_size = obs['new_allocation'].shape[0]
         #El retall s'haurà de fer dins del batcher una vegada hi hagi diversos nombres de qbits dins d'un batch
         #Ara agafo n_qbits del primer circuit però això no serà sempre veritat. TODO
         n_qbits = int(obs['n_qbits'][0][0])
-        x = obs['node_features'][:, :n_qbits, : n_qbits]
-        adj_mat = obs['adj_matrix'][: ,:n_qbits, : n_qbits]
+        x = self._get_node_features(obs)
+        adj_mat = self._get_adj_matrix(obs)
 
         #Passo pel batcher per a construir un sol estat no connex que contingui tots els estats
         batch = self.batcher(batch_size, x, adj_mat)
@@ -45,10 +80,12 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         x = batch.x.to(device)
         edge_index = batch.edge_index.to(device)
         edge_features = batch.edge_attr.to(device)
-        edge_features = edge_features.sum(axis=1) # combine interaction and lookahead for GCN
+
+        if self.gnn_name == 'GCN':
+            edge_features = edge_features.sum(axis=1) # combine interaction and lookahead for GCN
 
         node_embeddings = self.gnn(x, edge_index, edge_features)
-        #De nou, quan hi hagi diversos nombres de qbits, s'haurà de refer utilitzant el batch.batch, que indica a quina observació
+        #Quan hi hagi diversos nombres de qbits, s'haurà de refer utilitzant el batch.batch, que indica a quina observació
         #Pertany cada node TODO
 
         node_embeddings = node_embeddings.reshape(batch_size, n_qbits*self.out_features) #Batched flatten
@@ -71,6 +108,9 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         Handles multiple edge attributes (e.g., multiple features per edge).
         '''
         data_list = []
+
+        # TODO: vectorize?
+
         for i in range(batch_size):
             # Node features for the i-th graph
             node_features = batch_node_features[i]  # Shape: [n_nodes, node_feature_dim]
@@ -79,7 +119,7 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
             adj_matrix = batch_adj_matrix[i]  # Shape: [num_edge_features, n_nodes, n_nodes]
 
             # Compute edge_index from the union of nonzero entries across all features
-            combined_adj_matrix = adj_matrix.sum(dim=0)  # Shape: [n_nodes, n_nodes]
+            combined_adj_matrix = adj_matrix.sum(axis=0)  # Shape: [n_nodes, n_nodes]
             edge_index = torch.nonzero(combined_adj_matrix, as_tuple=False).t()  # Shape: [2, n_edges]
 
             # Extract edge attributes for all features
