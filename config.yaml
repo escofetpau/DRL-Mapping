@@ -1,3 +1,8 @@
+model_path: 'model/'
+tensorboard_path: 'tensorboard/'
+total_timesteps: 3000000
+device: 'cpu' # or 'cuda'
+
 circuit:
   circuit: null
   random_circuits: true
@@ -5,7 +10,7 @@ circuit:
   n_qubits: 8
   gates_per_slice: [1]
 
-action_type: S # set to L
+action_type: 'S' # or L
 
 weights_reward:
   nonlocal: 10
@@ -28,6 +33,4 @@ policy_kwargs:
     dropout: 0.3
     out_features: 16
     gnn_name: 'GATv2' # or 'GCN'
-
-total_timesteps: 3000000
 
