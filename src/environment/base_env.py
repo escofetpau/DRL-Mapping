@@ -7,11 +7,10 @@ from abc import abstractmethod
 
 
 from src.utils.constants import N_CORES, CORE_CAPACITY, ACTION_TYPES
-from random import sample, seed
+from random import seed
 from data.circuit_generator import generate_circuit
 from src.environment.utils import (
     is_last_qbit,
-    is_qbit_placed,
     unpack_action,
 )
 
@@ -131,14 +130,12 @@ class BaseGraphSeriesEnv(gym.Env):
     def _take_action(self, action: int) -> tuple[int, float, bool, bool, bool]:
         pass
 
-    def _get_lookaheads(self, circuit, func="exp", sigma=1):
+    def _get_lookaheads(self, circuit, sigma=1):
         """Get lookahead tensor from the circuit
 
         Returns:
             lookahead: np.array of shape (n_slices, n_qbits, n_qbits)
         """
-        assert func == "exp", "For the time being only exp is implemented"
-
         lookahead = np.zeros((self.n_slices, self.n_qbits, self.n_qbits))
         lookahead[-1] = circuit[-1].todense()
 
