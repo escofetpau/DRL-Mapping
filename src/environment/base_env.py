@@ -191,6 +191,7 @@ class BaseGraphSeriesEnv(gym.Env):
 
         done = False
 
+        #Can I just use the qbit_idx? Do not think this is replicable for both action types
         if is_last_qbit(qbit, self.new_allocation, self.n_qbits):
             done = self.slice_idx == self.n_slices - 1  # if last slice then end episode
             if not done:
