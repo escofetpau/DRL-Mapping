@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from torch_geometric.data import Data, Batch
-from torch_geometric.nn.models import GCN
+from torch_geometric.nn.models import GCN, GAT
 
 from src.models.gnn.gatv2 import GATv2Model
 from src.utils.constants import N_CORES, ST_OUTPUT_DIM, ST_HIDDEN_DIM
@@ -21,14 +21,17 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         super().__init__(observation_space, 
                                                    features_dim=out_features * 8 + N_CORES)
         self.device = device
-        in_features = observation_space['new_allocation'].shape[1] # PREGUNTA PER SERGI: n_qbits?? TODO: fix
         self.out_features = out_features
 
         self.gnn_name = gnn_name
 
+        # PREGUNTA PER SERGI: n_qbits?? TODO: fix. Mogut. Entenc que era aixo pero confirmamho. Aqui vol la dim de x.
+        #Es pot parametritzar més si volem jugar amb alguna feature extra. Ara mateix diria que amb això n'hi ha prou
         if self.gnn_name == 'GATv2':
-            self.gnn = GATv2Model(in_features, edge_dim, hidden_features, out_features, num_heads, hidden_layers, dropout)
+            in_features = 2*edge_dim+1
+            self.gnn = GAT(in_features, hidden_features, hidden_layers, out_features, dropout, v2 = True, edge_dim = edge_dim)
         else:
+            in_features = 2*edge_dim
             self.gnn = GCN(in_features, hidden_features, hidden_layers, out_features, dropout)
     
         self.gnn.to(self.device)
@@ -43,12 +46,17 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
             - obs['old_allocation']: mp.ndarray (batch_size, n_qbits, n_cores)
 
         Returns:
-            - node_features: (batch_size, 2*n_qbits, n_qbits)
+            - node_features: (batch_size, 2*n_qbits, n_qbits) / (batch_size, 2*n_qbits+1, n_qbits)
 
         '''
         n_qbits = int(obs['n_qbits'][0][0])
         concat_features = np.concat([obs['new_allocation'][:, :n_qbits, :n_qbits], obs['old_allocation'][:, :n_qbits, :n_qbits]], axis=1)
+        if self.gnn_name == 'GATv2':
+            #S'ha de posar la flag del index. La putada que no la estem passant. O s'afegeix a New Allocation i la treus  específicament per GCN.
+            #O la passem com una feature més, si en int, construim aquí el vector, si es el vector directament concatenem. Perdó que ho he vist ara i no ho he pogut fer :(.
+            pass #TODO
 
+        #Igual estic boig pero pot ser que aquí la obs ja siguin tensors? #REVIEW
         tensor_features = torch.tensor(concat_features, dtype=torch.float32)
   
         if self.device == 'cuda':
@@ -94,7 +102,7 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         edge_features = batch.edge_attr.to(self.device)
 
         if self.gnn_name == 'GCN':
-            edge_features = edge_features.sum(axis=1) # combine interaction and lookahead for GCN
+            edge_features = edge_features.sum(axis=1) # combine interaction and lookahead for GCN. Perf
 
         node_embeddings = self.gnn(x, edge_index, edge_features)
         #Quan hi hagi diversos nombres de qbits, s'haurà de refer utilitzant el batch.batch, que indica a quina observació
@@ -150,3 +158,4 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         # Combine all graphs into a single batch
         batch = Batch.from_data_list(data_list)
         return batch
+

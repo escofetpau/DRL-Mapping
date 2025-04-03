@@ -31,7 +31,7 @@ class GraphSeriesEnvPlaceCore(BaseGraphSeriesEnv):
             "slice_idx": 50,
         },
     ):
-        
+
         super().__init__(
             circuit_config, action_type, mask_full_cores, n_cores, weights_reward
         )
@@ -94,7 +94,6 @@ class GraphSeriesEnvPlaceCore(BaseGraphSeriesEnv):
 
         
         #Això és per les reserves? 
-        
         if has_pair(self.qbit_idx, self.interactions):
             neighbour = np.argmax(self.interactions[self.qbit_idx])
             self.core_capacities[action] -= 1

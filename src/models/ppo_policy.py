@@ -4,17 +4,23 @@ from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 #from stable_baselines3.common.policies import ActorCriticPolicy
 import numpy as np
 
-from src.models.feature_extractor import GNNFeatureExtractor
+from src.models.feature_extractor import GNNFeatureExtractor, GATv2FeatureExtractor
 
 
 class CustomPPOPolicy(MaskableActorCriticPolicy):
-    def __init__(self, observation_space, action_space, lr_schedule, device, net_arch = [64, 64, 64], features_extractor_kwargs={}, **kwargs):
+    def __init__(self, observation_space, action_space, lr_schedule, device,  net_arch = [64, 64, 64], features_extractor_kwargs={}, **kwargs):
         
-        print(kwargs)
+        net_arch =[64,64,64]
+        if features_extractor_kwargs['gnn_name'] == 'GCN':
+            feature_extractor_class = GNNFeatureExtractor
+        elif features_extractor_kwargs['gnn_name'] == 'GATv2':
+            feature_extractor_class = GATv2FeatureExtractor
+        else:
+            raise ValueError("Feature extractor not supported")
         super().__init__(observation_space, action_space, lr_schedule, 
                          net_arch = net_arch,
-                         features_extractor_class=GNNFeatureExtractor, 
-                         features_extractor_kwargs=features_extractor_kwargs)
+                         features_extractor_class=feature_extractor_class, 
+                         features_extractor_kwargs=kwargs)
         '''
         self.actor_net = nn.Sequential(
             nn.Linear(128, 64),
@@ -50,7 +56,7 @@ class CustomPPOPolicy(MaskableActorCriticPolicy):
             log_probs = action_dist.log_prob(actions)
             return actions, values.detach(), log_probs.detach()
 '''
-    
+    '''
     def _predict(self, obs, deterministic = True):
         #És el que es crida durant el procés de recopilació d'observacions (quant els batchs son 1), en comptes de forward.
         #És el mateix però pot ser deterministic i només entra en joc l'actor
@@ -66,6 +72,6 @@ class CustomPPOPolicy(MaskableActorCriticPolicy):
             action = action_dist.sample()
         
         return action
-    
+    '''
 
     
