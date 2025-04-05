@@ -6,22 +6,6 @@ import torch
 from src.models.feature_extractor import GNNFeatureExtractor
 
 
-
-@pytest.fixture
-def GNN():
-    obs_space = spaces.Dict({
-        'dummy': spaces.Box(low=0, high=1, shape=(4,), dtype=float)
-    })
-    return GNNFeatureExtractor(
-        observation_space=obs_space,
-        action_type='S',
-        gnn_name='GATv2',
-        device='cpu',
-        hidden_features=8,
-        n_qbits=4
-    )
-
-
 BATCH_SIZE = 2
 N_QBITS = 4
 N_CORES = 2
@@ -56,26 +40,48 @@ def batch_adj_matrix():
     return adj_matrix
 
 
-def test_batcher(GNN, batch_node_features, batch_adj_matrix):
-    '''
-        - edge_index: # (2, n_edges)
-        - edge_attr: # (n_edges, n_edges_features)
-    '''
+@pytest.fixture
+def make_gnn(obs_space):
+    def _make(gnn_name):
+        return GNNFeatureExtractor(
+            observation_space=obs_space,
+            action_type='S',
+            gnn_name=gnn_name,
+            device='cpu',
+            hidden_features=8,
+            n_qbits=N_QBITS
+        )
+    return _make
+
+
+@pytest.fixture
+def obs_space():
+    return spaces.Dict({
+        'dummy': spaces.Box(low=0, high=1, shape=(4,), dtype=float)
+    })
+
+
+@pytest.mark.parametrize("gnn_name", ["GCN", "GATv2"])
+def test_batcher(make_gnn, batch_node_features, batch_adj_matrix, gnn_name):
+    GNN = make_gnn(gnn_name)
     batch = GNN.batcher(batch_node_features, batch_adj_matrix)
 
-    N_EDGES = 6
+    N_EDGES = 6  # según tu adj_matrix de prueba
 
-    assert batch.x.shape == (BATCH_SIZE* N_QBITS, 2 * N_CORES + 1)
+    n_edge_features = 2 if gnn_name == "GATv2" else 1
+
+    assert batch.x.shape == (BATCH_SIZE * N_QBITS, 2 * N_CORES + 1)
     assert batch.edge_index.shape == (2, N_EDGES)
-    assert batch.edge_attr.shape == (N_EDGES, 2)
+    assert batch.edge_attr.shape == (N_EDGES, n_edge_features)
     assert torch.equal(batch.batch, torch.arange(BATCH_SIZE).repeat_interleave(N_QBITS))
 
 
-def test_batcher_vectorized(GNN, batch_node_features, batch_adj_matrix):
+@pytest.mark.parametrize("gnn_name", ["GCN", "GATv2"])
+def test_batcher_vectorized(make_gnn, batch_node_features, batch_adj_matrix, gnn_name):
+    GNN = make_gnn(gnn_name)
     batch = GNN.batcher(batch_node_features, batch_adj_matrix)
     batch_vectorized = GNN.batcher_vectorized(batch_node_features, batch_adj_matrix)
-    print(batch)
-    print(batch_vectorized)
+
     assert torch.equal(batch.x, batch_vectorized.x)
     assert torch.equal(batch.edge_index, batch_vectorized.edge_index)
     assert torch.equal(batch.edge_attr, batch_vectorized.edge_attr)

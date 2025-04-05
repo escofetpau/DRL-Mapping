@@ -17,20 +17,20 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
                  num_heads=1, hidden_layers=4, dropout=0):
         assert gnn_name in ['GATv2', 'GCN'], f'Invalid GNN model name: {gnn_name}'
 
-        super().__init__(observation_space,
-                                                   features_dim=out_features * n_qbits + N_CORES)
+        super().__init__(observation_space, features_dim=out_features * n_qbits + N_CORES)
+        
         self.device = device
         self.action_type = action_type
         self.out_features = out_features
         self.gnn_name = gnn_name
 
         in_features = 2*N_CORES + 1 if self.action_type == 'S' else 2*N_CORES
-        
+
         if self.gnn_name == 'GATv2':
             self.gnn = GAT(in_features, hidden_features, hidden_layers, out_features, dropout, v2 = True, edge_dim = 2)
 
         else:
-            self.gnn = GCN(in_features, hidden_features, hidden_layers, out_features, dropout, edge_dim = 1)
+            self.gnn = GCN(in_features, hidden_features, hidden_layers, out_features, dropout)
     
         self.gnn.to(self.device)
 
@@ -46,9 +46,7 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
 
         Returns:
             - node_features: (batch_size, n_qbits, 2*n_cores + 1) / (batch_size, n_qbits, 2*n_cores)
-
         '''
-        print('new_allocation type', type(obs['new_allocation']))
         n_qbits = int(obs['n_qbits'][0][0])
         features = torch.cat([obs['new_allocation'][:, :n_qbits, :n_qbits], obs['old_allocation'][:, :n_qbits, :n_qbits]], dim=2)
 
@@ -59,7 +57,7 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
             features = features.cuda()
 
         return features
-    
+
     def _get_adj_matrix(self, obs) -> torch.Tensor:
         '''
         Returns the adjacency matrix for the GNN, 
@@ -71,7 +69,7 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         Returns:
             - adj_matrix: (batch_size, n_qbits, n_qbits, 2)
         '''
-        
+
         n_qbits = int(obs['n_qbits'][0][0])
         adj_matrix = torch.stack([obs['interactions'][:, :n_qbits, :n_qbits], obs['lookaheads'][:, :n_qbits, :n_qbits]], dim=-1)
 
@@ -119,42 +117,32 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         batch_size, n_qbits, node_feature_size = batch_node_features.shape
         device = batch_node_features.device
 
-        # Node features and batch indices
         x = batch_node_features.reshape(-1, node_feature_size)  # [batch_size * n_qbits, node_feature_size]
         node_batch = torch.arange(batch_size, device=device).repeat_interleave(n_qbits)
 
         if self.gnn_name == 'GATv2':
             edge_mask = (batch_adj_matrix.sum(dim=-1) != 0)  # [batch_size, n_qbits, n_qbits]
-            # Get all edges across all graphs
             batch_idx, src, dst = edge_mask.nonzero(as_tuple=True)
             offset = batch_idx * n_qbits
-            
-            # Create edge_index with proper offsets
-            edge_index = torch.stack([
-                src + offset,
-                dst + offset
-            ], dim=0)  # [2, total_edges]
-            
-            # Gather edge attributes
-            edge_attr = batch_adj_matrix[batch_idx, src, dst]  # [total_edges, 2]
+
+            edge_index = torch.stack([src + offset, dst + offset], dim=0)  # [2, n_edges]
+
+            edge_attr = batch_adj_matrix[batch_idx, src, dst]  # [n_edges, 2]
             
         elif self.gnn_name == 'GCN':
-            # Vectorized edge processing for GCN
             combined_adj = torch.sum(batch_adj_matrix, dim=3)  # [batch_size, n_qbits, n_qbits]
             edge_mask = combined_adj != 0
             
             # Get all edges across all graphs
             batch_idx, src, dst = edge_mask.nonzero(as_tuple=True)
             offset = batch_idx * n_qbits
-            
-            # Create edge_index with proper offsets
+
             edge_index = torch.stack([
                 src + offset,
                 dst + offset
-            ], dim=0)  # [2, total_edges]
-            
-            # Gather edge attributes
-            edge_attr = combined_adj[batch_idx, src, dst].unsqueeze(1)  # [total_edges, 1]
+            ], dim=0)  # [2, n_edges]
+
+            edge_attr = combined_adj[batch_idx, src, dst].unsqueeze(1)  # [n_edges, 1]
         
         else:
             raise ValueError(f"Unsupported GNN type: {self.gnn_name}")
@@ -178,21 +166,14 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         batch_size = batch_node_features.shape[0]
 
         for i in range(batch_size):
-            node_features = batch_node_features[i]  # Shape: [n_qbits, 2*n_cores (+1)]
-            adj_matrix = batch_adj_matrix[i]  # Shape: [n_qbits, n_qbits, 2]
+            node_features = batch_node_features[i]  # [n_qbits, 2*n_cores (+1)]
+            adj_matrix = batch_adj_matrix[i]  # [n_qbits, n_qbits, 2]
 
-            if self.gnn_name == 'GATv2':
-                print('adj_matrix', adj_matrix)
-                edge_index = (adj_matrix.sum(-1) != 0).nonzero(as_tuple=False).t()  # Shape: [2, num_edges1]
+            edge_index = (adj_matrix.sum(-1) != 0).nonzero(as_tuple=False).t() # [2, num_edges1]
+            edge_attr = adj_matrix[edge_index[0], edge_index[1]]  # [num_edges, n_features]
 
-            elif self.gnn_name == 'GCN':
-                # Compute edge_index from the union of nonzero entries across all features
-                adj_matrix = torch.sum(adj_matrix, dim=2)  # Shape: [n_nodes, n_nodes]
-                edge_index = (adj_matrix != 0).nonzero(as_tuple=False).t()
-            else:
-                raise ValueError(f"Unsupported GNN type: {self.gnn_name}")
-            
-            edge_attr = adj_matrix[edge_index[0], edge_index[1]]  # Shape: [num_edges, 2]
+            if self.gnn_name == 'GCN':
+                edge_attr = edge_attr.sum(dim=-1, keepdim=True)
 
             data = Data(
                 x=node_features,
