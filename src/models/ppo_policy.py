@@ -1,26 +1,24 @@
 import torch
 import torch.nn as nn
 from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
-#from stable_baselines3.common.policies import ActorCriticPolicy
 import numpy as np
 
-from src.models.feature_extractor import GNNFeatureExtractor, GATv2FeatureExtractor
+from src.models.feature_extractor import GNNFeatureExtractor
 
 
 class CustomPPOPolicy(MaskableActorCriticPolicy):
-    def __init__(self, observation_space, action_space, lr_schedule, device,  net_arch = [64, 64, 64], features_extractor_kwargs={}, **kwargs):
+    def __init__(self, observation_space, action_space, lr_schedule, features_extractor_kwargs, net_arch):
+        print('--- Inicializando CustomPPOPolicy ---')
+        print(f'net_arch: {net_arch}')
+        print(f'Observation space: {observation_space}')
+        print(f'Action space: {action_space}')
+
+        super().__init__(observation_space, action_space, lr_schedule,
+                         net_arch=net_arch,
+                         features_extractor_class=GNNFeatureExtractor,
+                         features_extractor_kwargs=features_extractor_kwargs)
         
-        net_arch =[64,64,64]
-        if features_extractor_kwargs['gnn_name'] == 'GCN':
-            feature_extractor_class = GNNFeatureExtractor
-        elif features_extractor_kwargs['gnn_name'] == 'GATv2':
-            feature_extractor_class = GATv2FeatureExtractor
-        else:
-            raise ValueError("Feature extractor not supported")
-        super().__init__(observation_space, action_space, lr_schedule, 
-                         net_arch = net_arch,
-                         features_extractor_class=feature_extractor_class, 
-                         features_extractor_kwargs=kwargs)
+
         '''
         self.actor_net = nn.Sequential(
             nn.Linear(128, 64),

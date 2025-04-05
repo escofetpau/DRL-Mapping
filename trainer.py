@@ -10,8 +10,7 @@ from sb3_contrib.ppo_mask import MaskablePPO
 from src.models.ppo_policy import CustomPPOPolicy
 from src.environment.env_place_pair import GraphSeriesEnvPlacePair
 from src.utils.callback import CustomTensorboardCallback
-
-
+from src.utils.constants import N_CORES
 
 class Trainer():
     def __init__(self, config_path):
@@ -28,9 +27,9 @@ class Trainer():
         if config['device'] == 'cuda' and not torch.cuda.is_available():
             raise ValueError('CUDA is not available')
 
-        config['policy_kwargs']['device'] = config['device']
         config['policy_kwargs']['features_extractor_kwargs']['device'] = config['device']
-
+        config['policy_kwargs']['features_extractor_kwargs']['action_type'] = config['action_type']
+        config['policy_kwargs']['features_extractor_kwargs']['n_qbits'] = config['circuit']['n_qbits']
         return config
 
 
