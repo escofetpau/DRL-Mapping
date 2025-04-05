@@ -4,13 +4,18 @@ total_timesteps: 3000000
 device: 'cpu' # or 'cuda'
 
 circuit:
-  circuit: null
-  random_circuits: true
-  n_slices: 32
-  n_qubits: 8
+  circuit:
+    - 
+      - [0, 1, 0, 0]
+      - [1, 0, 0, 0]
+      - [0, 0, 0, 1]
+      - [0, 0, 1, 0]
+  random_circuits: True
+  n_slices: 3
+  n_qbits: 4
   gates_per_slice: [1]
 
-action_type: 'S' # or L
+action_type: 'L' # or L
 
 weights_reward:
   nonlocal: 10
@@ -25,7 +30,9 @@ ppo:
 
 
 policy_kwargs:
-  net_arch: [64, 64, 64]
+  net_arch:
+    pi: [64, 64]
+    vf: [64, 64] # does not include the first layer
   features_extractor_kwargs:
     hidden_features: 64
     num_heads: 1

@@ -2,7 +2,7 @@ from typing import Optional
 import numpy as np
 import wandb
 
-from src.utils.constants import N_CORES
+from src.utils.constants import N_CORES, CORE_CAPACITY
 from random import sample, seed
 from src.environment.utils import (
     pack_action,
@@ -25,18 +25,18 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
         self,
         circuit_config,
         action_type,
+        weights_reward,
         mask_full_cores=True,
         n_cores=N_CORES,
-        weights_reward={
-            "nonlocal": 1,
-            "capacity": 30,
-            "intervention": 40,
-            "slice_idx": 50,
-        },
     ):
 
         super().__init__(
-            circuit_config, action_type, mask_full_cores, n_cores, weights_reward
+            circuit_config,
+            action_type,
+            weights_reward,
+            mask_full_cores=True,
+            n_cores=N_CORES,
+            core_capacity=CORE_CAPACITY,
         )
 
     def _take_action(self, action: int) -> tuple[int, int, bool, bool, bool]:
@@ -53,11 +53,9 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             no_space_for_future_gates = is_no_space_for_future_gates_violation(
                 qbit,
                 core,
-                self.action_type,
                 self.core_capacities,
                 self.new_allocation,
                 self.interactions,
-                self.n_qbits,
             )
 
             return (
@@ -78,7 +76,7 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             )
 
         intervention = False
-        qbit, core = unpack_action(action, self.qbit_idx, self.n_cores)
+        qbit, core = unpack_action(action, self.qbit_idx, self.action_type, self.n_cores)
 
         violations = get_violations(qbit, core)
 
@@ -91,18 +89,17 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
         else:
             actual_action = action
 
-        qbit, core = unpack_action(actual_action, self.qbit_idx, self.n_cores)
+        qbit, core = unpack_action(actual_action, self.qbit_idx, self.action_type, self.n_cores)
         self.core_capacities[core] -= 1
-        self._set_new_placement(actual_action)
+        self._set_new_placement(qbit, core)
 
         if has_pair(qbit, self.interactions):
             neighbour = np.argmax(self.interactions[qbit])
             self.core_capacities[core] -= 1
-            self._set_new_placement(
-                pack_action(neighbour, core, self.action_type, self.n_cores)
-            )
+            self._set_new_placement(neighbour, core)
 
-        nl_comm = sum(abs(self.old_allocation - self.new_allocation)) // 2
+        nl_comm = np.sum(np.abs(self.old_allocation - self.new_allocation)) // 2
+        print('nlcomm computed in take action', nl_comm)
 
         return actual_action, nl_comm, intervention, violations[0], False
     
