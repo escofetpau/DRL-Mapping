@@ -1,6 +1,4 @@
 import numpy as np
-from src.utils.constants import ACTION_TYPES
-
 
 def has_pair(qbit, interactions):
     return sum(interactions[qbit]) > 0
@@ -14,19 +12,20 @@ def is_qbit_placed_vectorized(new_allocation):
     return np.any(new_allocation, axis=1)
 
 
-def is_last_qbit(qbit, new_allocation, n_qbits):
+def is_last_qbit(qbit, new_allocation):
+    n_qbits = new_allocation.shape[0]
     return all(any(new_allocation[q]) for q in range(n_qbits) if q != qbit)
 
 
-def unpack_action(action, curr_qbit_idx, n_cores):
+def unpack_action(action, curr_qbit_idx, action_type, n_cores):
     """action = qbit * n_cores + core"""
-    qbit = action // n_cores if curr_qbit_idx is None else curr_qbit_idx
-    core = action % n_cores if curr_qbit_idx is None else action
+    qbit = action // n_cores if action_type == 'L' else curr_qbit_idx
+    core = action % n_cores if action_type == 'L' else action
     return qbit, core
 
 
 def pack_action(qbit, core, action_type, n_cores):
-    if action_type == ACTION_TYPES[1]:
+    if action_type == 'L':
         return qbit * n_cores + core
     return core
 
@@ -63,36 +62,28 @@ def is_interaction_reservation_capacity_violation(
 def is_no_space_for_future_gates_violation(
     qbit,
     core,
-    action_type,
     core_capacities,
     new_allocation,
     interactions,
-    n_qbits,
     core_reservations=None,
     qbit_reservations=None,
 ):
+    n_qbits = new_allocation.shape[0]
     aux = core_capacities.copy()
     aux[core] -= 1  # suposem que coloquem qbit a core
-
     full_gate_capacity = (
         np.sum((aux - core_reservations) // 2)
         if core_reservations is not None
-        else np.sum(aux) // 2
+        else np.sum(a=np.array(aux) // 2)
     )
 
-    if action_type == ACTION_TYPES[0]:  # sergi
-        future_qbits_mask = np.arange(n_qbits) > qbit
-        if qbit_reservations is not None:
-            future_qbits_mask = future_qbits_mask & (qbit_reservations == -1)
-    else:  # laia
-        future_qbits_mask = (
-            (~is_qbit_placed_vectorized(new_allocation))
-            & (np.arange(n_qbits) != qbit)
-        )
-        if qbit_reservations is not None:
-            future_qbits_mask = future_qbits_mask & (qbit_reservations == -1)
+    future_qbits_mask = (
+        (~is_qbit_placed_vectorized(new_allocation))
+        & (np.arange(n_qbits) != qbit)
+    )
+    if qbit_reservations is not None:
+        future_qbits_mask = future_qbits_mask & (qbit_reservations == -1)
 
     remaining_full_gates = np.sum(interactions[:n_qbits][future_qbits_mask]) // 2
-
 
     return full_gate_capacity < remaining_full_gates
