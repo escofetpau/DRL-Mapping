@@ -1,8 +1,6 @@
+import os
 import yaml
 import torch
-import wandb
-import time
-import os
 
 from stable_baselines3.common.vec_env import DummyVecEnv
 from sb3_contrib.common.wrappers import ActionMasker
@@ -11,7 +9,6 @@ from sb3_contrib.ppo_mask import MaskablePPO
 from src.models.ppo_policy import CustomPPOPolicy
 from src.environment.env_place_pair import GraphSeriesEnvPlacePair
 from src.utils.callback import CustomTensorboardCallback
-from src.utils.constants import N_CORES
 
 
 class Trainer:
@@ -67,7 +64,7 @@ class Trainer:
         return DummyVecEnv([make_env])
 
     def initialize_model(self):
-
+        '''Initialize the model and save the configuration to a YAML file'''
         self.model = MaskablePPO(
             policy=CustomPPOPolicy,
             policy_kwargs=self.config["policy_kwargs"],
@@ -78,6 +75,10 @@ class Trainer:
             tensorboard_log="runs",
             **self.config["ppo"],
         )
+        save_path = f'config_files/{self.config['experiment_name']}_config.yaml'
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        with open(save_path, 'w') as f:
+            yaml.dump(self.config, f, default_flow_style=False)
 
     def load_model(self, model_path):
         self.model = MaskablePPO.load(model_path, self.env, device=self.config["device"])
@@ -131,4 +132,3 @@ class Trainer:
                 reset_num_timesteps=False,
                 tb_log_name = f'{self.config['experiment_name']}_{level}',
             )
-

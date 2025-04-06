@@ -1,4 +1,4 @@
-experiment_name: 'prova' # IMPORTANT TO CHANGE!!!
+experiment_name: 'big_prova' # IMPORTANT TO CHANGE!!!
 
 total_timesteps: 3000000
 device: 'cpu' # or 'cuda'
@@ -7,7 +7,7 @@ callback:
   early_stopping: True
   patience: 10
   delta: 0.05
-  save_freq: 5
+  save_freq: 10
   tensorboard_path: 'saved_models/'
 
 circuit:
@@ -18,7 +18,7 @@ circuit:
       - [0, 0, 0, 1]
       - [0, 0, 1, 0]
   random_circuits: True
-  n_slices: 3
+  n_slices: 12
   n_qbits: 4
 
 
