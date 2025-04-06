@@ -1,0 +1,3 @@
+*.zip
+events.out*
+__pycache__/

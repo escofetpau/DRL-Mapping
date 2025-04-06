@@ -1,7 +1,14 @@
-model_path: 'model/'
-tensorboard_path: 'tensorboard/'
+experiment_name: 'prova' # IMPORTANT TO CHANGE!!!
+
 total_timesteps: 3000000
 device: 'cpu' # or 'cuda'
+
+callback:
+  early_stopping: True
+  patience: 10
+  delta: 0.05
+  save_freq: 5
+  tensorboard_path: 'saved_models/'
 
 circuit:
   circuit:
@@ -13,13 +20,17 @@ circuit:
   random_circuits: True
   n_slices: 3
   n_qbits: 4
-  gates_per_slice: [1]
+
+
+levels:
+  level1: [1]
+  level2: [2]
 
 action_type: 'L' # or L
 
 weights_reward:
   nonlocal: 10
-  intervention: 20
+  intervention: 0
   direct_capacity_violation: 30
   missing_space_for_interaction_violation: 20
   no_space_for_future_gates_violation: 15

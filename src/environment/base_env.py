@@ -106,7 +106,7 @@ class BaseGraphSeriesEnv(gym.Env):
             }
         )
 
-        self.circuit = circuit # TODO: check that no self-loops
+        self.circuit = circuit  # TODO: check that no self-loops
         self.all_lookaheads = self._get_lookaheads(circuit)
 
         self.old_allocation = np.zeros((self.n_qbits, self.n_cores))
@@ -208,14 +208,18 @@ class BaseGraphSeriesEnv(gym.Env):
 
         done = False
 
-        #Can I just use the qbit_idx? Do not think this is replicable for both action types
+        # Can I just use the qbit_idx? Do not think this is replicable for both action types
         if is_last_qbit(qbit, self.new_allocation):
             done = self.slice_idx == self.n_slices - 1  # if last slice then end episode
             if not done:
                 self._advance_to_next_slice()
 
-        if self.action_type == 'S': # si faig una acció sergi, si o si haure alocat aquell qbit
-            while self.qbit_idx < self.n_qbits - 1 and is_qbit_placed(self.qbit_idx, self.new_allocation):
+        if (
+            self.action_type == "S"
+        ):  # si faig una acció sergi, si o si haure alocat aquell qbit
+            while self.qbit_idx < self.n_qbits - 1 and is_qbit_placed(
+                self.qbit_idx, self.new_allocation
+            ):
                 self.qbit_idx += 1
 
         info = (
@@ -223,7 +227,6 @@ class BaseGraphSeriesEnv(gym.Env):
         )  # info s'utilitza per a donar feedback a l'usuari. PPO el demana encara que estigui buit.
 
         return self._get_observation(), reward, done, truncated, info
-
 
     def _set_slice(self):
         """Sets the current slice based on self.slice_idx"""
@@ -272,7 +275,6 @@ class BaseGraphSeriesEnv(gym.Env):
             {}
         )  # info s'utilitza per a donar feedback a l'usuari. PPO el demana encara que estigui buit.
 
-        # Reset ha de retornar la observació
         return self._get_observation(), info
 
     @abstractmethod
