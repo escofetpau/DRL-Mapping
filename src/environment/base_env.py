@@ -9,7 +9,7 @@ from abc import abstractmethod
 
 from src.utils.constants import N_CORES, CORE_CAPACITY, ACTION_TYPES
 from random import seed
-from data.circuit_generator import generate_circuit
+from circuit_generator.random_circuit_generator import generate_circuit
 from src.environment.utils import (
     is_last_qbit,
     unpack_action,
