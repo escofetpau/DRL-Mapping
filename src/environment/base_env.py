@@ -121,11 +121,15 @@ class BaseGraphSeriesEnv(gym.Env):
             else spaces.Discrete(self.n_qbits * self.n_cores)
         )
 
-        self.qbit_idx = 0 if self.action_type == 'S' else None # only needed if action_type == 'S'
+        self.qbit_idx = (
+            0 if self.action_type == "S" else None
+        )  # only needed if action_type == 'S'
 
         self.nl_com = 0
         self.intervention = 0
         self.direct_capacity_violation = 0
+        self.missing_space_for_interaction_violation = 0
+        self.no_space_for_future_gates_violation = 0
 
         self.reset()
 
@@ -152,7 +156,7 @@ class BaseGraphSeriesEnv(gym.Env):
         Com que s'ha definit observation_space com un spaces.Dict, es retorna la
         observació com un diccionari amb els paràmetres indicats a la definició
         """
-        flag_vector = np.zeros((self.n_qbits,1))
+        flag_vector = np.zeros((self.n_qbits, 1))
         flag_vector[self.qbit_idx] = 1
 
         obs = {
@@ -162,17 +166,29 @@ class BaseGraphSeriesEnv(gym.Env):
             "lookaheads": self.lookahead,
             "n_qbits": np.array([self.n_qbits]),
             "core_capacities": self.core_capacities,
-            "flag": flag_vector
+            "flag": flag_vector,
         }
         return obs
 
-    def _get_reward(self, nl_com: int, intervention: bool, direct_capacity_violation: bool):
-        self.nl_com = nl_com
-        self.intervention = intervention
-        self.direct_capacity_violation = direct_capacity_violation
-        reward = -self.weights_reward["nonlocal"] * nl_com - self.weights_reward[
-            "intervention"
-        ] * int(intervention)
+    def _get_reward(self):
+        weights = self.weights_reward
+        intervention = self.intervention
+        direct_capacity_violation = self.direct_capacity_violation
+        missing_space_for_interaction_violation = (
+            self.missing_space_for_interaction_violation
+        )
+        no_space_for_future_gates_violation = self.no_space_for_future_gates_violation
+        nl_com = self.nl_com
+
+        reward = (
+            - weights["nonlocal"] * nl_com
+            - weights["intervention"] * int(intervention)
+            - weights["direct_capacity_violation"] * direct_capacity_violation
+            - weights["missing_space_for_interaction_violation"]
+            * missing_space_for_interaction_violation
+            - weights["no_space_for_future_gates_violation"]
+            * no_space_for_future_gates_violation
+        )
         return reward
 
     def _set_new_placement(self, qbit, core):
@@ -180,20 +196,15 @@ class BaseGraphSeriesEnv(gym.Env):
 
     def step(self, action: int):
         """Action: {}"""
-        actual_action, nl_com, intervention, direct_capacity_violation, truncated = (
-            self._take_action(action=action)
-        )
+        actual_action, truncated = self._take_action(action=action)
 
         if truncated:
             return self._get_observation(), -100, False, True, {}
 
-        qbit, core = unpack_action(actual_action, self.qbit_idx, self.action_type, self.n_cores)
-        reward = self._get_reward(nl_com, intervention, direct_capacity_violation)
-
-        self.total_reward += reward
-        self.total_nl_coms += nl_com
-        self.total_interventions += int(intervention)
-        self.total_direct_capacity_violations += int(direct_capacity_violation)
+        qbit, core = unpack_action(
+            actual_action, self.qbit_idx, self.action_type, self.n_cores
+        )
+        reward = self._get_reward()
 
         done = False
 
@@ -224,7 +235,7 @@ class BaseGraphSeriesEnv(gym.Env):
             else self.new_allocation
         )
 
-        if self.action_type == 'S':
+        if self.action_type == "S":
             self.qbit_idx = 0
 
         self.new_allocation = np.zeros((self.n_qbits, self.n_cores))  # (q, c)
@@ -248,10 +259,11 @@ class BaseGraphSeriesEnv(gym.Env):
             self.circuit = circuit
             self.all_lookaheads = self._get_lookaheads(circuit)
 
-        self.total_reward = 0
-        self.total_nl_coms = 0
-        self.total_interventions = 0
-        self.total_direct_capacity_violations = 0
+        self.nl_com = 0
+        self.intervention = 0
+        self.direct_capacity_violation = 0
+        self.missing_space_for_interaction_violation = 0
+        self.no_space_for_future_gates_violation = 0
 
         self.slice_idx = 0
         self._set_slice()
@@ -263,7 +275,6 @@ class BaseGraphSeriesEnv(gym.Env):
         # Reset ha de retornar la observació
         return self._get_observation(), info
 
-    
     @abstractmethod
     def env_mask(self):
         pass

@@ -11,7 +11,9 @@ class CustomTensorboardCallback(BaseCallback):
         self.nl_comm_sums = 0
         self.intervention_sums = 0
         self.direct_capacity_violation_sums = 0
-        self.truncated_count = 0
+        self.missing_space_for_interaction_violation_sums = 0
+        self.no_space_for_future_gates_violation_sums = 0
+
 
     def _on_step(self) -> bool:
         # Retrieve the reward for the current step
@@ -26,18 +28,9 @@ class CustomTensorboardCallback(BaseCallback):
         self.nl_comm_sums += env.get_attr('nl_com')[0]
         self.intervention_sums += env.get_attr('intervention')[0]
         self.direct_capacity_violation_sums += env.get_attr('direct_capacity_violation')[0]
-        #self.truncated_count += int(env.get_attr('truncated')[0])
+        self.missing_space_for_interaction_violation_sums += env.get_attr('missing_space_for_interaction_violation')[0]
+        self.no_space_for_future_gates_violation_sums += env.get_attr('no_space_for_future_gates_violation')[0]
 
-        '''
-        if hasattr(env, "nl_com"):
-            self.nl_comm_sums += env.nl_com
-        if hasattr(env, "intervention"):
-            self.intervention_sums += env.intervention
-        if hasattr(env, "direct_capacity_violation"):
-            self.direct_capacity_violation_sums += env.direct_capacity_violation
-        if hasattr(env, "truncated"):
-            self.truncated_count += int(env.truncated)
-        '''
         # Check if the episode is done
         dones = self.locals.get("dones")
         if dones is not None and any(dones):
@@ -49,8 +42,10 @@ class CustomTensorboardCallback(BaseCallback):
             self.logger.record("episode/nl_comm_sum", self.nl_comm_sums)
             self.logger.record("episode/intervention_sum", self.intervention_sums)
             self.logger.record("episode/direct_capacity_violation_sum", self.direct_capacity_violation_sums)
-            self.logger.record("total/truncated", self.truncated_count)
+            self.logger.record("episode/missing_space_for_interaction_violation_sum", self.missing_space_for_interaction_violation_sums)
+            self.logger.record("episode/no_space_for_future_gates_violation", self.no_space_for_future_gates_violation_sums)
 
+            self.logger.dump(self.num_timesteps)
 
             # Reset buffers for the next episode
             self.episode_rewards = []

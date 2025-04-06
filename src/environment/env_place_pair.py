@@ -39,7 +39,7 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             core_capacity=CORE_CAPACITY,
         )
 
-    def _take_action(self, action: int) -> tuple[int, int, bool, bool, bool]:
+    def _take_action(self, action: int) -> tuple[int, bool]:
 
         def get_violations(qbit, core):
             direct_capacity_violation = is_direct_capacity_violation(
@@ -68,7 +68,7 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             """"""
             return next(
                 (
-                    qbit * self.n_cores + core if self.qbit_idx is None else core
+                    qbit * self.n_cores + core if self.action_type == 'L' else core
                     for core in sample(range(self.n_cores), self.n_cores)
                     if not any(get_violations(qbit, core))
                 ),
@@ -99,20 +99,25 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             self._set_new_placement(neighbour, core)
 
         nl_comm = np.sum(np.abs(self.old_allocation - self.new_allocation)) // 2
-        print('nlcomm computed in take action', nl_comm)
 
-        return actual_action, nl_comm, intervention, violations[0], False
+        self.nl_com = nl_comm
+        self.intervention = intervention
+        self.direct_capacity_violation = violations[0]
+        self.missing_space_for_interaction_violation = violations[1]
+        self.no_space_for_future_gates_violation = violations[2]
+
+        return actual_action, False
     
 
     def env_mask(self):
         """Mask for the MaskablePPO"""
         mask = (
             np.ones(self.n_qbits * self.n_cores, dtype=bool)
-            if self.qbit_idx is None
+            if self.action_type == 'L'
             else np.ones(self.n_cores, dtype=bool)
         )
 
-        if self.qbit_idx is None:
+        if self.action_type == 'L':
             for qbit in range(self.n_qbits):  # ban qbits already placed
                 if is_qbit_placed(qbit, self.new_allocation):
                     for core in range(self.n_cores):
@@ -122,7 +127,7 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             for core, capacity in enumerate(self.core_capacities):
                 if capacity <= 0:
                     for qbit in range(self.n_qbits):
-                        if self.qbit_idx is None:
+                        if self.action_type == 'L':
                             mask[qbit * self.n_cores + core] = False
                         else:
                             mask[core] = False

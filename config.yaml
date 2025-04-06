@@ -21,6 +21,8 @@ weights_reward:
   nonlocal: 10
   intervention: 20
   direct_capacity_violation: 30
+  missing_space_for_interaction_violation: 20
+  no_space_for_future_gates_violation: 15
 
 ppo:
   batch_size: 64
