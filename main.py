@@ -1,6 +1,6 @@
 import argparse
 
-from trainer import Trainer
+from src.trainer import Trainer
 
 
 def parse_args():
@@ -12,8 +12,6 @@ def parse_args():
 def main():
     args = parse_args()
     trainer = Trainer(config_path='config.yaml')
-    print(args.curriculum)
-    return
     if args.curriculum:
         trainer.curriculum_learn()
     else:

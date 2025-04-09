@@ -1,6 +1,5 @@
 from typing import Optional
 import numpy as np
-import wandb
 
 from src.utils.constants import N_CORES, CORE_CAPACITY
 from random import sample, seed

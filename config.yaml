@@ -1,7 +1,7 @@
 experiment_name: 'big_prova' # IMPORTANT TO CHANGE!!!
 
 total_timesteps: 3000000
-device: 'cpu' # or 'cuda'
+device: 'cuda' # 'cpu' or 'cuda'
 
 callback:
   early_stopping: True

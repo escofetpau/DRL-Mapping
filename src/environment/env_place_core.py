@@ -1,6 +1,5 @@
 from typing import Optional
 import numpy as np
-import wandb
 
 from src.utils.constants import N_CORES
 from random import sample, seed
@@ -80,7 +79,6 @@ class GraphSeriesEnvPlaceCore(BaseGraphSeriesEnv):
 
         if not any(violations):
             intervention = True
-            # print('invalid action', action)
             actual_action: Optional[int] = get_valid_action(self.qbit_idx)
             assert actual_action is not None, "Truncation happened!"
 
