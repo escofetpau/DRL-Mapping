@@ -75,6 +75,9 @@ class CustomTensorboardCallback(BaseCallback):
             self.nl_comm_sums = 0
             self.intervention_sums = 0
             self.direct_capacity_violation_sums = 0
+            self.missing_space_for_interaction_violation_sums = 0
+            self.no_space_for_future_gates_violation_sums = 0
+
 
         # Save the model periodically
         if self.n_calls % self.save_freq == 0:
