@@ -4,6 +4,7 @@ import numpy as np
 from src.utils.constants import N_CORES, CORE_CAPACITY
 from random import sample, seed
 from src.environment.utils import (
+    get_nl_com,
     pack_action,
     unpack_action,
     has_pair,
@@ -91,18 +92,21 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
         self.core_capacities[core] -= 1
         self._set_new_placement(qbit, core)
 
-        if has_pair(qbit, self.interactions):
-            neighbour = np.argmax(self.interactions[qbit])
-            self.core_capacities[core] -= 1
-            self._set_new_placement(neighbour, core)
-
-        nl_comm = np.sum(np.abs(self.old_allocation - self.new_allocation)) // 2
-
-        self.nl_com = nl_comm
+        
+        self.nl_com = get_nl_com(self.old_allocation, self.new_allocation, qbit)
         self.intervention = intervention
         self.direct_capacity_violation = violations[0]
         self.missing_space_for_interaction_violation = violations[1]
         self.no_space_for_future_gates_violation = violations[2]
+
+        if has_pair(qbit, self.interactions):
+            neighbour = np.argmax(self.interactions[qbit])
+            self.core_capacities[core] -= 1
+            self._set_new_placement(neighbour, core)
+            self.nl_com += get_nl_com(self.old_allocation, self.new_allocation, neighbour)
+
+        print('nl_com', self.nl_com)
+
 
         return actual_action, False
     
@@ -115,11 +119,13 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             else np.ones(self.n_cores, dtype=bool)
         )
 
-        if self.action_type == 'L':
-            for qbit in range(self.n_qbits):  # ban qbits already placed
-                if is_qbit_placed(qbit, self.new_allocation):
-                    for core in range(self.n_cores):
+        for qbit in range(self.n_qbits):  # ban qbits already placed
+            if is_qbit_placed(qbit, self.new_allocation):
+                for core in range(self.n_cores):
+                    if self.action_type == 'L':
                         mask[qbit * self.n_cores + core] = False
+                    else:
+                        mask[core] = False
 
         if self.mask_full_cores:  # ban full cores
             for core, capacity in enumerate(self.core_capacities):

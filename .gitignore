@@ -1,3 +1,5 @@
 *.zip
 events.out*
 __pycache__/
+
+config_files/

@@ -1,5 +1,9 @@
 import numpy as np
 
+def get_nl_com(old_allocation, new_allocation, qbit):
+    return np.sum(np.abs(old_allocation[qbit] - new_allocation[qbit])) // 2
+
+
 def has_pair(qbit, interactions):
     return sum(interactions[qbit]) > 0
 
