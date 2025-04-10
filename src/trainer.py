@@ -31,8 +31,12 @@ class Trainer:
         )
 
     def get_config(self, config_path):
+
         with open(config_path, "r") as file:
             config = yaml.safe_load(file)
+
+        if self.find_largest_matching_file('config_files', f'{config['experiment_name']}_config') is not None:
+            raise ValueError(f'An experiment with name {config['experiment_name']} already exists. Please change the experiment name in the config file.')
 
         if config["device"] == "cuda" and not torch.cuda.is_available():
             raise ValueError("CUDA is not available")
@@ -94,17 +98,16 @@ class Trainer:
         )
 
 
-    def find_largest_matching_file(self, model_dir, experiment_name, level):
-        prefix = f"{experiment_name}_{level}"
+    def find_largest_matching_file(self, directory: str, prefix: str) -> str | None:
         matching_files = [
-            f for f in os.listdir(model_dir)
-            if f.startswith(prefix) and os.path.isfile(os.path.join(model_dir, f))
+            f for f in os.listdir(directory)
+            if f.startswith(prefix) and os.path.isfile(os.path.join(directory, f))
         ]
 
         if not matching_files:
-            raise FileNotFoundError(f"No matching files found for prefix: {prefix}")
+            return None
 
-        return os.path.join(model_dir, max(matching_files))
+        return os.path.join(directory, max(matching_files))
 
 
     def curriculum_learn(self):
@@ -119,8 +122,13 @@ class Trainer:
         for level, gates_per_slice in self.config['levels'].items():
             if level == 'level1':
                 continue
-
-            model_path = self.find_largest_matching_file(self.config['callback']['tensorboard_path'], self.config['experiment_name'], f'level{str(int(level[-1])-1)}')
+            
+            prefix = f"{self.config['experiment_name']}_level{str(int(level[-1])-1)}"
+            model_path = self.find_largest_matching_file(self.config['callback']['tensorboard_path'], prefix)
+            
+            if model_path is None:
+                raise FileNotFoundError(f"No matching files found for prefix {prefix} in directory {self.config['callback']['tensorboard_path']}")
+            
             self.load_model(model_path)
             # change parameter env
             self.model.env.envs[0].env.gates_per_slice = gates_per_slice
