@@ -79,7 +79,7 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
 
         violations = get_violations(qbit, core)
 
-        if not any(violations):
+        if any(violations):
             intervention = True
             actual_action: Optional[int] = get_valid_action(qbit)
             assert actual_action is not None, "Truncation happened!"
