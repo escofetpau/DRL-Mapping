@@ -1,9 +1,6 @@
-MAX_QBITS = 50
-N_CORES = 2
-CORE_CAPACITY = 4
+MAX_QUBITS = 50
 
 #GAT params
 ST_OUTPUT_DIM = 16
 ST_HIDDEN_DIM = 128
 
-ACTION_TYPES = ['S', 'L'] # [sergi, laia]

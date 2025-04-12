@@ -7,13 +7,13 @@ from src.models.feature_extractor import GNNFeatureExtractor
 
 
 BATCH_SIZE = 2
-N_QBITS = 4
+N_QUBITS = 4
 N_CORES = 2
 
 @pytest.fixture
 def batch_node_features(): # sergi
-    # shape (batch_size, n_qbits, 2 * n_cores + 1)
-    features = torch.zeros((BATCH_SIZE, N_QBITS, 2 * N_CORES + 1))
+    # shape (batch_size, n_qubits, 2 * n_cores + 1)
+    features = torch.zeros((BATCH_SIZE, N_QUBITS, 2 * N_CORES + 1))
     features[0, 0, N_CORES] = 1
     features[0, 0, -1] = 1
     features[1, 0, N_CORES] = 1
@@ -24,19 +24,19 @@ def batch_node_features(): # sergi
 
 @pytest.fixture
 def batch_adj_matrix():
-    lookahead = torch.zeros((BATCH_SIZE, N_QBITS, N_QBITS))
+    lookahead = torch.zeros((BATCH_SIZE, N_QUBITS, N_QUBITS))
     lookahead[0, 0, 1] = 0.5
     lookahead[0, 1, 0] = 0.5
     lookahead[1, 1, 3] = 0.25
     lookahead[1, 3, 1] = 0.25
     
-    interactions = torch.zeros((BATCH_SIZE, N_QBITS, N_QBITS))
+    interactions = torch.zeros((BATCH_SIZE, N_QUBITS, N_QUBITS))
     interactions[0, 0, 1] = 1
     interactions[0, 1, 0] = 1
     interactions[1, 2, 3] = 1
     interactions[1, 3, 2] = 1
 
-    adj_matrix = torch.stack([interactions, lookahead], dim=-1) # (batch_size, n_qbits, n_qbits, 2)
+    adj_matrix = torch.stack([interactions, lookahead], dim=-1) # (batch_size, n_qubits, n_qubits, 2)
     return adj_matrix
 
 
@@ -49,7 +49,8 @@ def make_gnn(obs_space):
             gnn_name=gnn_name,
             device='cpu',
             hidden_features=8,
-            n_qbits=N_QBITS
+            n_qubits=N_QUBITS,
+            n_cores=N_CORES,
         )
     return _make
 
@@ -70,10 +71,10 @@ def test_batcher(make_gnn, batch_node_features, batch_adj_matrix, gnn_name):
 
     n_edge_features = 2 if gnn_name == "GATv2" else 1
 
-    assert batch.x.shape == (BATCH_SIZE * N_QBITS, 2 * N_CORES + 1)
+    assert batch.x.shape == (BATCH_SIZE * N_QUBITS, 2 * N_CORES + 1)
     assert batch.edge_index.shape == (2, N_EDGES)
     assert batch.edge_attr.shape == (N_EDGES, n_edge_features)
-    assert torch.equal(batch.batch, torch.arange(BATCH_SIZE).repeat_interleave(N_QBITS))
+    assert torch.equal(batch.batch, torch.arange(BATCH_SIZE).repeat_interleave(N_QUBITS))
 
 
 @pytest.mark.parametrize("gnn_name", ["GCN", "GATv2"])

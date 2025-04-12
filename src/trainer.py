@@ -41,15 +41,16 @@ class Trainer:
         if config["device"] == "cuda" and not torch.cuda.is_available():
             raise ValueError("CUDA is not available")
 
+        config["policy_kwargs"]["features_extractor_kwargs"]["n_cores"] = config[
+            "n_cores"
+        ]
         config["policy_kwargs"]["features_extractor_kwargs"]["device"] = config[
             "device"
         ]
         config["policy_kwargs"]["features_extractor_kwargs"]["action_type"] = config[
             "action_type"
         ]
-        config["policy_kwargs"]["features_extractor_kwargs"]["n_qbits"] = config[
-            "circuit"
-        ]["n_qbits"]
+        config["policy_kwargs"]["features_extractor_kwargs"]["n_qubits"] = config["n_qubits"]
         return config
 
     def get_env(self):
@@ -59,6 +60,8 @@ class Trainer:
             env = GraphSeriesEnvPlacePair(
                 circuit_config=self.config["circuit"],
                 action_type=self.config["action_type"],
+                n_qubits=self.config["n_qubits"],
+                n_cores=self.config["n_cores"],
                 weights_reward=self.config["weights_reward"],
             )
             env = ActionMasker(env, lambda e: e.env_mask())

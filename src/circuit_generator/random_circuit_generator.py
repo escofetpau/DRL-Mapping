@@ -2,7 +2,7 @@ import numpy as np
 import sparse
 import random
 
-def generate_circuit(num_slices, num_qubits, gates_per_slice):
+def generate_circuit(num_qubits, num_slices, gates_per_slice):
     # Function to generate a single sparse matrix with the given constraints
     def generate_sparse_matrix(num_qubits, num_gates):
         rows = []
