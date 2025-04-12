@@ -1,6 +1,0 @@
-MAX_QUBITS = 50
-
-#GAT params
-ST_OUTPUT_DIM = 16
-ST_HIDDEN_DIM = 128
-
