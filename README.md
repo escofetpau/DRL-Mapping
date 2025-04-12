@@ -12,3 +12,8 @@ Automatically run curriculum learning:
 ```bash
 poetry run python main.py --curriculum
 ```
+
+Display tensorboard plots:
+```bash
+poetry run tensorboard --logdir=runs
+```
