@@ -1,4 +1,3 @@
-from typing import Optional
 import gymnasium as gym
 import sparse
 from gymnasium import spaces
@@ -21,37 +20,34 @@ seed(42)
 class BaseGraphSeriesEnv(gym.Env):
     def __init__(
         self,
-        circuit_config,
-        action_type,
-        weights_reward,
-        n_qubits,
-        n_cores,
-        mask_full_cores=True,
-        core_capacity = None,
+        circuit_config: dict,
+        action_type: str,
+        weights_reward: dict,
+        n_qubits: int,
+        n_cores: int,
+        core_capacity: int | None = None,
 
     ):
         """
-        config: Ara mateix, és només el circuit. La resta de paràmetres s'agafen de src.utils.constants
-        n_qubits: Es dedueix directament del circuit
-        observation_space: Definim l'espai d'observació com a:
-            node_features: Matriu de dim [n_qubits, node_features] que serà paddejada a [max_qubits, node_features]
-                Serà redimensionada al feature extractor, però la dimensió s'ha de definir amb el padding ja fet.
-            adj_matrix: Matriu d'adjacència [max_qubits, max_qubits] on un valor != 0 indica aresta. El seu valor és el lookahead (o derivats)
-                De nou, serà redimensionada al feature_extractor. Si es vol afegir una altra edge_feature, probablement n'hi ha prou amb
-                fer-la de dimensió [2, max_qubits, max_qubits], on la primera dimensió indica la feature que s'està mirant.
-            n_qubits: Indica el nombre real de qubits a utilitzar, el valor que utilitza el feature extractor per a redimensionar la observació.
-        action_space: En el meu cas, el nombre de cores, al teu, també serà spaces.Discrete però posant self.n_qubits*N_CORES (si ho tinc ben entès)
+        Args:
+            - circuit_config: Configuració del circuit. Pot ser un circuit random o un circuit predefinit.
+            - action_type: Can be 'S' (sequentially allocate each qubit to a core aka Sergi) or 'L' (choose qubit and core aka Laia)
+            - weights_reward
+            - n_qubits
+            - n_cores
+            - core_capacity: If None, uses n_qubits / n_cores. If not None, uses core_capacity.
         """
         super().__init__()
         # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         assert action_type in ['S', 'L'], f"action_type should be in ['S', 'L'] but got {action_type}"
 
         if core_capacity is None:
-            core_capacity = n_qubits / n_cores
+            core_capacity = n_qubits // n_cores
 
-        self.weights_reward = weights_reward
         self.action_type = action_type
-        self.mask_full_cores = mask_full_cores
+        self.weights_reward = weights_reward
+        self.n_qubits = n_qubits
+        self.n_cores = n_cores
         self.core_capacity = core_capacity
 
         self.random_circuits = circuit_config.get("random_circuits")
@@ -65,8 +61,6 @@ class BaseGraphSeriesEnv(gym.Env):
         else:
             circuit = sparse.COO(np.array(circuit_config["circuit"]))
 
-        self.n_qubits = n_qubits
-        self.n_cores = n_cores
         self.n_slices = circuit.shape[0]  # Important for the end of episode
 
         self.observation_space = spaces.Dict(
@@ -110,15 +104,13 @@ class BaseGraphSeriesEnv(gym.Env):
             }
         )
 
-        self.circuit = circuit  # TODO: check that no self-
+        self.circuit = circuit  # TODO: check that no self-loops
         assert circuit.shape == (self.n_slices, self.n_qubits, self.n_qubits), (
             f"Expected circuit shape {(self.n_slices, self.n_qubits, self.n_qubits)} but got {circuit.shape}"
         )
-        print('circuit shape', circuit.shape)
 
-        self.all_lookaheads = None # s'inicialitzen al reset
-        self.lookahead = None
-
+        self.all_lookaheads = self._get_all_lookaheads(circuit) # s'inicialitzen al reset
+        self.lookahead = self.all_lookaheads[0]
 
         self.old_allocation = np.zeros((self.n_qubits, self.n_cores))
         self.new_allocation = np.zeros((self.n_qubits, self.n_cores))
@@ -131,9 +123,7 @@ class BaseGraphSeriesEnv(gym.Env):
             else spaces.Discrete(self.n_qubits * self.n_cores)
         )
 
-        self.qubit_idx = (
-            0 if self.action_type == "S" else None
-        )  # only needed if action_type == 'S'
+        self.qubit_idx = 0 # only needed if action_type == 'S'
 
         self.nl_com = 0
         self.intervention = 0
@@ -141,13 +131,15 @@ class BaseGraphSeriesEnv(gym.Env):
         self.missing_space_for_interaction_violation = 0
         self.no_space_for_future_gates_violation = 0
 
-        self.reset()
+        self.slice_idx = 0
+        self._set_slice(slice_idx=0)
+
 
     @abstractmethod
-    def _take_action(self, action: int) -> tuple[int, float, bool, bool, bool]:
+    def _take_action(self, action: int) -> tuple[int, bool]:
         pass
 
-    def _get_all_lookaheads(self, circuit, sigma=1):
+    def _get_all_lookaheads(self, circuit: sparse.COO, sigma=1) -> np.ndarray:
         """Get lookahead tensor from the circuit
 
         Returns:
@@ -161,7 +153,7 @@ class BaseGraphSeriesEnv(gym.Env):
 
         return lookahead
 
-    def _get_observation(self):
+    def _get_observation(self) -> dict:
         """
         Com que s'ha definit observation_space com un spaces.Dict, es retorna la
         observació com un diccionari amb els paràmetres indicats a la definició
@@ -180,7 +172,7 @@ class BaseGraphSeriesEnv(gym.Env):
         }
         return obs
 
-    def _get_reward(self):
+    def _get_reward(self) -> int:
         weights = self.weights_reward
         intervention = self.intervention
         direct_capacity_violation = self.direct_capacity_violation
@@ -201,10 +193,10 @@ class BaseGraphSeriesEnv(gym.Env):
         )
         return reward
 
-    def _set_new_placement(self, qubit, core):
+    def _set_new_placement(self, qubit: int, core: int) -> None:
         self.new_allocation[qubit][core] = 1
 
-    def step(self, action: int):
+    def step(self, action: int) -> tuple[dict, int, bool, bool, dict]:
         """Action: {}"""
         actual_action, truncated = self._take_action(action=action)
 
@@ -222,11 +214,9 @@ class BaseGraphSeriesEnv(gym.Env):
         if is_last_qubit(qubit, self.new_allocation):
             done = self.slice_idx == self.n_slices - 1  # if last slice then end episode
             if not done:
-                self._advance_to_next_slice()
+                self._set_slice(self.slice_idx + 1)
 
-        if (
-            self.action_type == "S"
-        ):  # si faig una acció sergi, si o si haure alocat aquell qubit
+        if self.action_type == "S":
             while self.qubit_idx < self.n_qubits - 1 and is_qubit_placed(
                 self.qubit_idx, self.new_allocation
             ):
@@ -238,32 +228,29 @@ class BaseGraphSeriesEnv(gym.Env):
 
         return self._get_observation(), reward, done, truncated, info
 
-    def _set_slice(self):
+    def _set_slice(self, slice_idx: int) -> None:
         """Sets the current slice based on self.slice_idx"""
+
+        self.slice_idx = slice_idx
+        self.qubit_idx = 0 # only needed if action_type == 'S'
 
         # Nodes
         self.old_allocation = (
             np.zeros((self.n_qubits, self.n_cores))
-            if self.slice_idx == 0
+            if slice_idx == 0
             else self.new_allocation
         )
-
-        if self.action_type == "S":
-            self.qubit_idx = 0
 
         self.new_allocation = np.zeros((self.n_qubits, self.n_cores))  # (q, c)
 
         # Edges
-        self.interactions = self.circuit[self.slice_idx].todense()
-        self.lookahead = self.all_lookaheads[self.slice_idx]
+        self.interactions = self.circuit[slice_idx].todense()
+        self.lookahead = self.all_lookaheads[slice_idx]
 
         self.core_capacities = np.array([self.core_capacity] * self.n_cores)
 
-    def _advance_to_next_slice(self):
-        self.slice_idx += 1
-        self._set_slice()
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None) -> tuple[dict, dict]:
 
         if self.random_circuits:
             circuit = generate_circuit(
@@ -278,8 +265,7 @@ class BaseGraphSeriesEnv(gym.Env):
         self.missing_space_for_interaction_violation = 0
         self.no_space_for_future_gates_violation = 0
 
-        self.slice_idx = 0
-        self._set_slice()
+        self._set_slice(0)
 
         info = (
             {}
@@ -288,5 +274,5 @@ class BaseGraphSeriesEnv(gym.Env):
         return self._get_observation(), info
 
     @abstractmethod
-    def env_mask(self):
+    def env_mask(self) -> None:
         pass
