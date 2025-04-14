@@ -1,6 +1,6 @@
 import argparse
 
-from src.trainer import Trainer
+from utils.trainer import Trainer
 
 
 def parse_args():
