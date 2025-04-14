@@ -5,7 +5,6 @@
 ```
 DRL-Mapping/
 │
-│
 ├── src/                        # Source code
 │   ├── circuit_generator/                  # Scripts to generate circuits
 │   │   ├── random_circuit_generator.py     # Script to generate random circuits
@@ -14,27 +13,26 @@ DRL-Mapping/
 │   ├── environment/            # 
 │   │   ├── base_env.py         # Basic environment functionalities
 │   │   ├── env_place_pair.py   # Environment where the pair of a qubit is placed together
-│   │   └── utils.py            # Helper functions
-│   │                        
+│   │   └── utils.py            # Helper functions                      
 │   │
 │   ├── models/
 │   │   ├── feature_extractor.py    # Graph Neural Network
 │   │   └── ppo_policy.py           # Deep Reinforcement Learning model
 │   │
 │   └── utils/
-│   │   ├── callback.py    # Metric logging and early stopping logic
-│   │   └── trainer.py     # Training logic
+│       ├── callback.py    # Metric logging and early stopping logic
+│       └── trainer.py     # Training logic
 │ 
 ├── tests/                          # Automated tests
-│   │
 │   ├── environment/                   
 │   │   ├── test_base_env.py        # Tests
 │   │   └── test_utils.py           # Tests
-│   │
-│   models/
-│      └── test_feature_extractor.py
+│   └── models/
+│       └── test_feature_extractor.py
 │
 ├── main.py                         # CLI run                
+│
+├── config.yaml                     # Experiment configuration             
 │
 ├── .gitignore                      # Untracked files to ignore                
 │
@@ -42,9 +40,16 @@ DRL-Mapping/
 │
 ├── poetry.lock                     # Dependencies
 │
+└── pyproject.toml                  # Project configuration
 ```
 
 ## Usage
+
+In a venv/conda environment with poetry installed, run the following command to install project dependencies:
+
+```bash
+poetry install
+```
 
 Do a single run using the gates_per_slice stored in level1:
 
