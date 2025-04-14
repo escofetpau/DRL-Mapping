@@ -2,6 +2,8 @@ from typing import Optional
 import numpy as np
 
 from random import sample, seed
+
+from src.environment.base_env import BaseGraphSeriesEnv
 from src.environment.utils import (
     get_nl_com,
     unpack_action,
@@ -12,8 +14,6 @@ from src.environment.utils import (
     is_no_space_for_future_gates_violation,
 )
 
-from src.environment.base_env import BaseGraphSeriesEnv
-
 
 seed(42)
 
@@ -21,13 +21,18 @@ seed(42)
 class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
     def __init__(
         self,
-        circuit_config,
-        action_type,
-        n_qubits,
-        n_cores,
-        weights_reward,
-        mask_full_cores=True,
+        circuit_config: dict,
+        action_type: str,
+        n_qubits: int,
+        n_cores: int,
+        weights_reward: dict,
+        mask_full_cores: bool = True,
     ):
+        '''
+            - mask_full_cores: If True, masks full cores. Avoids direct_capacity_violatio. If False, does not mask cores.
+        '''
+
+        self.mask_full_cores = mask_full_cores
 
         super().__init__(
             circuit_config,
@@ -35,13 +40,12 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             weights_reward,
             n_qubits,
             n_cores,
-            mask_full_cores=mask_full_cores,
             core_capacity=n_qubits//n_cores,
         )
 
     def _take_action(self, action: int) -> tuple[int, bool]:
 
-        def get_violations(qubit, core):
+        def get_violations(qubit: int, core: int) -> tuple[bool, bool, bool]:
             direct_capacity_violation = is_direct_capacity_violation(
                 core, self.core_capacities
             )
@@ -64,7 +68,7 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
                 no_space_for_future_gates,
             )
 
-        def get_valid_action(qubit) -> int | None:
+        def get_valid_action(qubit: int) -> int | None:
             """"""
             return next(
                 (
@@ -96,6 +100,8 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
         self.nl_com = get_nl_com(self.old_allocation, self.new_allocation, qubit)
         self.intervention = intervention
         self.direct_capacity_violation = violations[0]
+        if self.direct_capacity_violation:
+            print(f"Direct capacity violation for qubit {qubit} and core {core}")
         self.missing_space_for_interaction_violation = violations[1]
         self.no_space_for_future_gates_violation = violations[2]
 
@@ -105,13 +111,11 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             self._set_new_placement(neighbour, core)
             self.nl_com += get_nl_com(self.old_allocation, self.new_allocation, neighbour)
 
-        print('nl_com', self.nl_com)
-
 
         return actual_action, False
     
 
-    def env_mask(self):
+    def env_mask(self) -> np.ndarray:
         """Mask for the MaskablePPO"""
         mask = (
             np.ones(self.n_qubits * self.n_cores, dtype=bool)
@@ -119,21 +123,19 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
             else np.ones(self.n_cores, dtype=bool)
         )
 
-        for qubit in range(self.n_qubits):  # ban qubits already placed
-            if is_qubit_placed(qubit, self.new_allocation):
-                for core in range(self.n_cores):
-                    if self.action_type == 'L':
+        if self.action_type == 'L':
+            for qubit in range(self.n_qubits):  # ban qubits already placed
+                if is_qubit_placed(qubit, self.new_allocation):
+                    for core in range(self.n_cores):
                         mask[qubit * self.n_cores + core] = False
-                    else:
-                        mask[core] = False
 
         if self.mask_full_cores:  # ban full cores
             for core, capacity in enumerate(self.core_capacities):
-                if capacity <= 0:
-                    for qubit in range(self.n_qubits):
-                        if self.action_type == 'L':
+                if capacity == 0:
+                    if self.action_type == 'L':
+                        for qubit in range(self.n_qubits):
                             mask[qubit * self.n_cores + core] = False
-                        else:
-                            mask[core] = False
+                    else:
+                        mask[core] = False
 
         return mask

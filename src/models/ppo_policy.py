@@ -1,7 +1,4 @@
-import torch
-import torch.nn as nn
 from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
-import numpy as np
 
 from src.models.feature_extractor import GNNFeatureExtractor
 

@@ -11,9 +11,9 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
     '''
     El feature extractor s'encarrega de redimensionar les observacions i fer el forward per la GNN.
     '''
-    def __init__(self, observation_space, action_type, gnn_name, device,
-                 hidden_features, n_qubits, n_cores, out_features=16,
-                 num_heads=1, hidden_layers=4, dropout=0):
+    def __init__(self, observation_space, action_type: str, gnn_name: str, device: str,
+                 hidden_features, n_qubits: int, n_cores: int, out_features: int = 16,
+                 num_heads: int = 1, hidden_layers: int = 4, dropout: float=0):
         assert gnn_name in ['GATv2', 'GCN'], f'Invalid GNN model name: {gnn_name}'
 
         super().__init__(observation_space, features_dim=out_features * n_qubits + n_cores)

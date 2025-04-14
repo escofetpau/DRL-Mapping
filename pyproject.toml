@@ -23,3 +23,6 @@ priority = "supplemental"
 
 [tool.poetry.group.testing.dependencies]
 pytest = "^8.3.5"
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+

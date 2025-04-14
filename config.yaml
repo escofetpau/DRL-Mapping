@@ -1,13 +1,16 @@
-experiment_name: 'big_prova' # IMPORTANT TO CHANGE!!!
+experiment_name: 'prova' # IMPORTANT TO CHANGE!!! Li pots dir prova per fer quick tests
 
 total_timesteps: 3000000
 device: 'cuda' # 'cpu' or 'cuda'
 
+n_cores: 2
+n_qubits: 8
+
 callback:
-  early_stopping: True
-  patience: 10
-  delta: 0.05
-  save_freq: 10
+  early_stopping: False
+  patience: 100
+  delta: 0.2
+  save_freq: 100000
   tensorboard_path: 'saved_models/'
 
 circuit:
@@ -18,15 +21,17 @@ circuit:
       - [0, 0, 0, 1]
       - [0, 0, 1, 0]
   random_circuits: True
-  n_slices: 12
-  n_qbits: 4
+  n_slices: 32
 
 
 levels:
   level1: [1]
   level2: [2]
+  level3: [3]
+  level4: [4]
+  level5: [1, 2, 3, 4]
 
-action_type: 'L' # or L
+action_type: 'S' # or L
 
 weights_reward:
   nonlocal: 10
@@ -39,7 +44,7 @@ ppo:
   batch_size: 64
   learning_rate: 0.0005
   n_steps: 4096
-  gae_lambda: 0.95
+  gae_lambda: 1
 
 
 policy_kwargs:
