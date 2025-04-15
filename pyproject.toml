@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 [tool.poetry.dependencies]
-python = ">=3.10"
+python = "3.12"
 torch = "2.2.1+cu118"  # Versión más nueva con CUDA 11.8 (compatible con drivers 11.7)
 stable-baselines3 = "2.4.0"
 sb3-contrib = "2.4.0"
