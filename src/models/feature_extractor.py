@@ -1,10 +1,7 @@
-import numpy as np
 import torch
-import torch.nn as nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-from torch_geometric.data import Data, Batch
+from torch_geometric.data import Batch, Data
 from torch_geometric.nn.models import GCN, GAT
-
 
 
 class GNNFeatureExtractor(BaseFeaturesExtractor):
@@ -35,7 +32,7 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         self.gnn.to(self.device)
 
 
-    def _get_node_features(self, obs) -> torch.Tensor:
+    def _get_batch_node_features(self, obs) -> torch.Tensor:
         '''
         Returns the node features for the GNN, which are the new and old allocations.
 
@@ -58,9 +55,9 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
 
         return features
 
-    def _get_adj_matrix(self, obs) -> torch.Tensor:
+    def _get_batch_adj_matrix(self, obs) -> torch.Tensor:
         '''
-        Returns the adjacency matrix for the GNN, 
+        Returns the adjacency matrix for the GNN
         
         Arguments (no pooling): 
             - obs['interactions']: (batch_size, n_qubits, n_qubits)
@@ -77,37 +74,27 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
             adj_matrix = adj_matrix.cuda()
         return adj_matrix
 
+
     def forward(self, obs):
         batch_size = obs['new_allocation'].shape[0]
         n_qubits = int(obs['n_qubits'][0][0])
-        x = self._get_node_features(obs)
-        adj_matrix = self._get_adj_matrix(obs)
+        x = self._get_batch_node_features(obs)
+        adj_matrix = self._get_batch_adj_matrix(obs)
 
-        #Passo pel batcher per a construir un sol estat no connex que contingui tots els estats
-        batch = self.batcher(x, adj_matrix)
+        batch = self.batcher_vectorized(x, adj_matrix)
 
         x = batch.x.to(self.device)
         edge_index = batch.edge_index.to(self.device) # (2, n_edges)
         edge_attr = batch.edge_attr.to(self.device) # (n_edges, n_edges_features)
  
         node_embeddings = self.gnn(x, edge_index, edge_attr)
-        #Quan hi hagi diversos nombres de qubits, s'haurà de refer utilitzant el batch.batch, que indica a quina observació
-        #Pertany cada node TODO
 
-        node_embeddings = node_embeddings.reshape(batch_size, n_qubits*self.out_features) #Batched flatten
+        node_embeddings = node_embeddings.reshape(batch_size, n_qubits*self.out_features) # Batched flatten
         node_embeddings = torch.cat((node_embeddings, obs['core_capacities']), dim = 1)
         return node_embeddings
-        '''
-        Ara s'estan aplanant les node_embeddings, amb el set transformer el procés canviarà
-        '''
-        node_embeddings = node_embeddings.unsqueeze(0)
 
-        #El que abans era un graf tot junt ara es torna a separar per instàncies dins del batch
-        node_embeddings = node_embeddings.view(batch_size, n_qubits, self.out_features)
 
-        return node_embeddings
-
-    def batcher_vectorized(self, batch_node_features, batch_adj_matrix):
+    def batcher_vectorized(self, batch_node_features: torch.Tensor, batch_adj_matrix: torch.Tensor) -> Batch:
         '''
         Constructs a PyG.Batch object from a batch of graphs with two edge types (interaction & lookahead).
         Args:
@@ -117,35 +104,20 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         batch_size, n_qubits, node_feature_size = batch_node_features.shape
         device = batch_node_features.device
 
-        x = batch_node_features.reshape(-1, node_feature_size)  # [batch_size * n_qubits, node_feature_size]
-        node_batch = torch.arange(batch_size, device=device).repeat_interleave(n_qubits)
+        # Nodes
+        x = batch_node_features.reshape(-1, node_feature_size)  # (batch_size * n_qubits, node_feature_size)
+        node_batch = torch.arange(batch_size, device=device).repeat_interleave(n_qubits)    # [0..0, 1..1, ... batch_size-1..batch_size-1]
 
-        if self.gnn_name == 'GATv2':
-            edge_mask = (batch_adj_matrix.sum(dim=-1) != 0)  # [batch_size, n_qubits, n_qubits]
-            batch_idx, src, dst = edge_mask.nonzero(as_tuple=True)
-            offset = batch_idx * n_qubits
+        # Edges
+        edge_mask = (batch_adj_matrix.sum(dim=-1) != 0)  # (batch_size, n_qubits, n_qubits)
+        batch_idx, src, dst = edge_mask.nonzero(as_tuple=True) # (n_edges), (n_edges), (n_edges)
+        offset = batch_idx * n_qubits   # to match with node_batch
 
-            edge_index = torch.stack([src + offset, dst + offset], dim=0)  # [2, n_edges]
+        edge_index = torch.stack([src + offset, dst + offset], dim=0)  # (2, n_edges)
+        edge_attr = batch_adj_matrix[batch_idx, src, dst]  # (n_edges, 2)
 
-            edge_attr = batch_adj_matrix[batch_idx, src, dst]  # [n_edges, 2]
-            
-        elif self.gnn_name == 'GCN':
-            combined_adj = torch.sum(batch_adj_matrix, dim=3)  # [batch_size, n_qubits, n_qubits]
-            edge_mask = combined_adj != 0
-            
-            # Get all edges across all graphs
-            batch_idx, src, dst = edge_mask.nonzero(as_tuple=True)
-            offset = batch_idx * n_qubits
-
-            edge_index = torch.stack([
-                src + offset,
-                dst + offset
-            ], dim=0)  # [2, n_edges]
-
-            edge_attr = combined_adj[batch_idx, src, dst].unsqueeze(1)  # [n_edges, 1]
-        
-        else:
-            raise ValueError(f"Unsupported GNN type: {self.gnn_name}")
+        if self.gnn_name == 'GCN':
+            edge_attr = edge_attr.sum(dim=-1, keepdim=True) # (n_edges, 1)
 
         batch = Batch(
             x=x,
@@ -157,7 +129,7 @@ class GNNFeatureExtractor(BaseFeaturesExtractor):
         return batch
 
 
-    def batcher(self, batch_node_features, batch_adj_matrix):
+    def batcher(self, batch_node_features: torch.Tensor, batch_adj_matrix: torch.Tensor) -> Batch:
         '''
         Constructs a PyG.Data object for each graph observation and combines them into a batch.
         Handles multiple edge attributes (e.g., multiple features per edge).
