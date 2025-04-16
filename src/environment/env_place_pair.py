@@ -27,12 +27,16 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
         n_cores: int,
         weights_reward: dict,
         mask_full_cores: bool = True,
+        mask_no_interaction_space: bool = True,
+        mask_no_future_gates_space: bool = True,
     ):
         '''
             - mask_full_cores: If True, masks full cores. Avoids direct_capacity_violatio. If False, does not mask cores.
         '''
 
         self.mask_full_cores = mask_full_cores
+        self.mask_no_interaction_space = mask_no_interaction_space
+        self.mask_no_future_gates_space = mask_no_future_gates_space
 
         super().__init__(
             circuit_config,
@@ -108,7 +112,7 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
         if has_pair(qubit, self.interactions):
             neighbour = np.argmax(self.interactions[qubit])
             self.core_capacities[core] -= 1
-            self._set_new_placement(neighbour, core)
+            self._set_new_placement(int(neighbour), core)
             self.nl_com += get_nl_com(self.old_allocation, self.new_allocation, neighbour)
 
 
@@ -124,18 +128,20 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
         )
 
         if self.action_type == 'L':
-            for qubit in range(self.n_qubits):  # ban qubits already placed
-                if is_qubit_placed(qubit, self.new_allocation):
-                    for core in range(self.n_cores):
-                        mask[qubit * self.n_cores + core] = False
+            for qubit in range(self.n_qubits):
+                is_placed = is_qubit_placed(qubit, self.new_allocation)
+                qubit_has_pair = has_pair(qubit, self.interactions)
 
-        if self.mask_full_cores:  # ban full cores
-            for core, capacity in enumerate(self.core_capacities):
-                if capacity == 0:
-                    if self.action_type == 'L':
-                        for qubit in range(self.n_qubits):
+                if is_placed or self.mask_full_cores or (self.mask_no_interaction_space and qubit_has_pair) or self.mask_no_future_gates_space:
+                    for core in range(self.n_cores):
+                        if is_placed or (self.mask_full_cores and self.core_capacities[core] == 0) or (self.mask_no_interaction_space and qubit_has_pair and self.core_capacities[core] < 2) or (self.mask_no_future_gates_space and is_no_space_for_future_gates_violation(qubit, core, self.core_capacities, self.new_allocation, self.interactions)):
                             mask[qubit * self.n_cores + core] = False
-                    else:
+
+        elif self.action_type == 'S':
+            qubit_has_pair = has_pair(self.qubit_idx, self.interactions)
+            if self.mask_full_cores or (self.mask_no_interaction_space and qubit_has_pair) or self.mask_no_future_gates_space:
+                for core in range(self.n_cores):
+                    if (self.mask_full_cores and self.core_capacities[core] == 0) or (self.mask_no_interaction_space and qubit_has_pair and self.core_capacities[core] < 2) or (self.mask_no_future_gates_space and is_no_space_for_future_gates_violation(self.qubit_idx, core, self.core_capacities, self.new_allocation, self.interactions)):
                         mask[core] = False
 
         return mask
