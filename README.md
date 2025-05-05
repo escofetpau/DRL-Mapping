@@ -62,6 +62,11 @@ Automatically run curriculum learning:
 poetry run python main.py --curriculum
 ```
 
+If you are using the cluster:
+```bash
+nohup poetry run python main.py --curriculum > out.log 2>&1 &
+```
+
 Display tensorboard plots:
 ```bash
 poetry run tensorboard --logdir=runs
