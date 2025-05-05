@@ -1,31 +1,56 @@
-model_path: 'model/'
-tensorboard_path: 'tensorboard/'
+experiment_name: 'prova' # IMPORTANT TO CHANGE!!! Li pots dir prova per fer quick tests
+
 total_timesteps: 3000000
-device: 'cpu' # or 'cuda'
+device: 'cuda' # 'cpu' or 'cuda'
+
+n_cores: 2
+n_qubits: 8
+
+callback:
+  early_stopping: False
+  patience: 100
+  delta: 0.2
+  save_freq: 100000
+  tensorboard_path: 'saved_models/'
 
 circuit:
-  circuit: null
-  random_circuits: true
+  circuit:
+    - 
+      - [0, 1, 0, 0]
+      - [1, 0, 0, 0]
+      - [0, 0, 0, 1]
+      - [0, 0, 1, 0]
+  random_circuits: True
   n_slices: 32
-  n_qubits: 8
-  gates_per_slice: [1]
+
+
+levels:
+  level1: [1]
+  level2: [2]
+  level3: [3]
+  level4: [4]
+  level5: [1, 2, 3, 4]
 
 action_type: 'S' # or L
 
 weights_reward:
   nonlocal: 10
-  intervention: 20
+  intervention: 0
   direct_capacity_violation: 30
+  missing_space_for_interaction_violation: 20
+  no_space_for_future_gates_violation: 15
 
 ppo:
   batch_size: 64
   learning_rate: 0.0005
   n_steps: 4096
-  gae_lambda: 0.95
+  gae_lambda: 1
 
 
 policy_kwargs:
-  net_arch: [64, 64, 64]
+  net_arch:
+    pi: [64, 64]
+    vf: [64, 64] # does not include the first layer
   features_extractor_kwargs:
     hidden_features: 64
     num_heads: 1
@@ -33,4 +58,4 @@ policy_kwargs:
     dropout: 0.3
     out_features: 16
     gnn_name: 'GATv2' # or 'GCN'
-
+  

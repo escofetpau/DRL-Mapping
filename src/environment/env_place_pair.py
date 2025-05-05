@@ -1,20 +1,18 @@
 from typing import Optional
 import numpy as np
-import wandb
 
-from src.utils.constants import N_CORES
 from random import sample, seed
+
+from src.environment.base_env import BaseGraphSeriesEnv
 from src.environment.utils import (
-    pack_action,
+    get_nl_com,
     unpack_action,
     has_pair,
-    is_qbit_placed,
+    is_qubit_placed,
     is_direct_capacity_violation,
     is_missing_space_for_interaction_violation,
     is_no_space_for_future_gates_violation,
 )
-
-from src.environment.base_env import BaseGraphSeriesEnv
 
 
 seed(42)
@@ -23,41 +21,49 @@ seed(42)
 class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
     def __init__(
         self,
-        circuit_config,
-        action_type,
-        mask_full_cores=True,
-        n_cores=N_CORES,
-        weights_reward={
-            "nonlocal": 1,
-            "capacity": 30,
-            "intervention": 40,
-            "slice_idx": 50,
-        },
+        circuit_config: dict,
+        action_type: str,
+        n_qubits: int,
+        n_cores: int,
+        weights_reward: dict,
+        mask_full_cores: bool = True,
+        mask_no_interaction_space: bool = True,
+        mask_no_future_gates_space: bool = True,
     ):
+        '''
+            - mask_full_cores: If True, masks full cores. Avoids direct_capacity_violatio. If False, does not mask cores.
+        '''
+
+        self.mask_full_cores = mask_full_cores
+        self.mask_no_interaction_space = mask_no_interaction_space
+        self.mask_no_future_gates_space = mask_no_future_gates_space
 
         super().__init__(
-            circuit_config, action_type, mask_full_cores, n_cores, weights_reward
+            circuit_config,
+            action_type,
+            weights_reward,
+            n_qubits,
+            n_cores,
+            core_capacity=n_qubits//n_cores,
         )
 
-    def _take_action(self, action: int) -> tuple[int, int, bool, bool, bool]:
+    def _take_action(self, action: int) -> tuple[int, bool]:
 
-        def get_violations(qbit, core):
+        def get_violations(qubit: int, core: int) -> tuple[bool, bool, bool]:
             direct_capacity_violation = is_direct_capacity_violation(
                 core, self.core_capacities
             )
             missing_space_for_interaction_violation = (
                 is_missing_space_for_interaction_violation(
-                    qbit, core, self.core_capacities, self.interactions
+                    qubit, core, self.core_capacities, self.interactions
                 )
             )
             no_space_for_future_gates = is_no_space_for_future_gates_violation(
-                qbit,
+                qubit,
                 core,
-                self.action_type,
                 self.core_capacities,
                 self.new_allocation,
                 self.interactions,
-                self.n_qbits,
             )
 
             return (
@@ -66,68 +72,76 @@ class GraphSeriesEnvPlacePair(BaseGraphSeriesEnv):
                 no_space_for_future_gates,
             )
 
-        def get_valid_action(qbit) -> int | None:
+        def get_valid_action(qubit: int) -> int | None:
             """"""
             return next(
                 (
-                    qbit * self.n_cores + core if self.qbit_idx is None else core
+                    qubit * self.n_cores + core if self.action_type == 'L' else core
                     for core in sample(range(self.n_cores), self.n_cores)
-                    if not any(get_violations(qbit, core))
+                    if not any(get_violations(qubit, core))
                 ),
                 None,
             )
 
         intervention = False
-        qbit, core = unpack_action(action, self.qbit_idx, self.n_cores)
+        qubit, core = unpack_action(action, self.qubit_idx, self.action_type, self.n_cores)
 
-        violations = get_violations(qbit, core)
+        violations = get_violations(qubit, core)
 
-        if not any(violations):
+        if any(violations):
             intervention = True
-            # print('invalid action', action)
-            actual_action: Optional[int] = get_valid_action(qbit)
+            actual_action: Optional[int] = get_valid_action(qubit)
             assert actual_action is not None, "Truncation happened!"
 
         else:
             actual_action = action
 
-        qbit, core = unpack_action(actual_action, self.qbit_idx, self.n_cores)
+        qubit, core = unpack_action(actual_action, self.qubit_idx, self.action_type, self.n_cores)
         self.core_capacities[core] -= 1
-        self._set_new_placement(actual_action)
+        self._set_new_placement(qubit, core)
 
-        if has_pair(qbit, self.interactions):
-            neighbour = np.argmax(self.interactions[qbit])
+        
+        self.nl_com = get_nl_com(self.old_allocation, self.new_allocation, qubit)
+        self.intervention = intervention
+        self.direct_capacity_violation = violations[0]
+        if self.direct_capacity_violation:
+            print(f"Direct capacity violation for qubit {qubit} and core {core}")
+        self.missing_space_for_interaction_violation = violations[1]
+        self.no_space_for_future_gates_violation = violations[2]
+
+        if has_pair(qubit, self.interactions):
+            neighbour = np.argmax(self.interactions[qubit])
             self.core_capacities[core] -= 1
-            self._set_new_placement(
-                pack_action(neighbour, core, self.action_type, self.n_cores)
-            )
+            self._set_new_placement(int(neighbour), core)
+            self.nl_com += get_nl_com(self.old_allocation, self.new_allocation, neighbour)
 
-        nl_comm = sum(abs(self.old_allocation - self.new_allocation)) // 2
 
-        return actual_action, nl_comm, intervention, violations[0], False
+        return actual_action, False
     
 
-    def env_mask(self):
+    def env_mask(self) -> np.ndarray:
         """Mask for the MaskablePPO"""
         mask = (
-            np.ones(self.n_qbits * self.n_cores, dtype=bool)
-            if self.qbit_idx is None
+            np.ones(self.n_qubits * self.n_cores, dtype=bool)
+            if self.action_type == 'L'
             else np.ones(self.n_cores, dtype=bool)
         )
 
-        if self.qbit_idx is None:
-            for qbit in range(self.n_qbits):  # ban qbits already placed
-                if is_qbit_placed(qbit, self.new_allocation):
-                    for core in range(self.n_cores):
-                        mask[qbit * self.n_cores + core] = False
+        if self.action_type == 'L':
+            for qubit in range(self.n_qubits):
+                is_placed = is_qubit_placed(qubit, self.new_allocation)
+                qubit_has_pair = has_pair(qubit, self.interactions)
 
-        if self.mask_full_cores:  # ban full cores
-            for core, capacity in enumerate(self.core_capacities):
-                if capacity <= 0:
-                    for qbit in range(self.n_qbits):
-                        if self.qbit_idx is None:
-                            mask[qbit * self.n_cores + core] = False
-                        else:
-                            mask[core] = False
+                if is_placed or self.mask_full_cores or (self.mask_no_interaction_space and qubit_has_pair) or self.mask_no_future_gates_space:
+                    for core in range(self.n_cores):
+                        if is_placed or (self.mask_full_cores and self.core_capacities[core] == 0) or (self.mask_no_interaction_space and qubit_has_pair and self.core_capacities[core] < 2) or (self.mask_no_future_gates_space and is_no_space_for_future_gates_violation(qubit, core, self.core_capacities, self.new_allocation, self.interactions)):
+                            mask[qubit * self.n_cores + core] = False
+
+        elif self.action_type == 'S':
+            qubit_has_pair = has_pair(self.qubit_idx, self.interactions)
+            if self.mask_full_cores or (self.mask_no_interaction_space and qubit_has_pair) or self.mask_no_future_gates_space:
+                for core in range(self.n_cores):
+                    if (self.mask_full_cores and self.core_capacities[core] == 0) or (self.mask_no_interaction_space and qubit_has_pair and self.core_capacities[core] < 2) or (self.mask_no_future_gates_space and is_no_space_for_future_gates_violation(self.qubit_idx, core, self.core_capacities, self.new_allocation, self.interactions)):
+                        mask[core] = False
 
         return mask
